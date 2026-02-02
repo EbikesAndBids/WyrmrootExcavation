@@ -79,7 +79,7 @@ class AssetManager {
      */
     async load(progressCallback) {
         const totalAssets = Object.keys(this.manifest.sprites).length +
-                          Object.keys(this.manifest.sounds).length;
+                          Object.keys(this.manifest.audio).length;
         let loadedCount = 0;
 
         // Load sprites
