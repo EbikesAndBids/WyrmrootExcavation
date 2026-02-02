@@ -37,7 +37,7 @@ class InputManager {
         window.addEventListener('mousemove', (e) => this.handleMouseMove(e));
         window.addEventListener('mousedown', (e) => this.handleMouseDown(e));
         window.addEventListener('mouseup', (e) => this.handleMouseUp(e));
-        window.addEventListener('wheel', (e) => this.handleWheel(e));
+        window.addEventListener('wheel', (e) => this.handleWheel(e), { passive: true });
         window.addEventListener('contextmenu', (e) => e.preventDefault());
     }
 
@@ -100,7 +100,6 @@ class InputManager {
 
     handleWheel(e) {
         this.mouse.wheel = e.deltaY;
-        e.preventDefault();
     }
 
     /**

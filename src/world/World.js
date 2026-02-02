@@ -239,15 +239,28 @@ export class World {
     getSpawnPosition() {
         const spawnX = Math.floor(WORLD_WIDTH / 2);
 
-        // Find surface level
-        let spawnY = SURFACE_LEVEL;
-        while (this.getTile(spawnX, spawnY) === TILE_TYPES.AIR && spawnY < WORLD_HEIGHT) {
+        // Find surface level - look for first solid tile starting from top
+        let spawnY = 0;
+
+        // Skip air tiles to find surface
+        while (spawnY < WORLD_HEIGHT && this.getTile(spawnX, spawnY) === TILE_TYPES.AIR) {
             spawnY++;
         }
 
+        // If we couldn't find a surface, use a default
+        if (spawnY >= WORLD_HEIGHT) {
+            console.warn('Could not find surface, using default spawn');
+            spawnY = SURFACE_LEVEL;
+        }
+
+        // Spawn player 2 tiles above the surface
+        const playerY = Math.max(0, spawnY - 2);
+
+        console.log(`Spawn calculated: tile (${spawnX}, ${playerY}), world (${spawnX * TILE_SIZE}, ${playerY * TILE_SIZE})`);
+
         return {
             x: spawnX * TILE_SIZE,
-            y: (spawnY - 2) * TILE_SIZE
+            y: playerY * TILE_SIZE
         };
     }
 }

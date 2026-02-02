@@ -64,8 +64,8 @@ export class Renderer {
     drawBackground(camera, depth) {
         const pos = camera.getRenderPosition();
 
-        // Create gradient based on depth
-        const gradient = this.ctx.createLinearGradient(0, pos.y, 0, pos.y + this.canvas.height);
+        // Create gradient based on depth (in world coordinates since canvas is translated)
+        const gradient = this.ctx.createLinearGradient(pos.x, pos.y, pos.x, pos.y + this.canvas.height);
 
         // Surface colors
         if (depth < 20) {

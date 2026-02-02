@@ -65,32 +65,46 @@ export class Game {
     async init() {
         console.log('Initializing Wyrmroot Excavation...');
 
-        // Load assets
-        await assetManager.load((progress) => {
-            this.ui.updateLoadingProgress(progress);
-        });
+        try {
+            // Load assets
+            console.log('Loading assets...');
+            await assetManager.load((progress) => {
+                this.ui.updateLoadingProgress(progress);
+            });
+            console.log('Assets loaded.');
 
-        // Initialize world
-        this.world.init();
+            // Initialize world
+            console.log('Initializing world...');
+            this.world.init();
+            console.log('World initialized.');
 
-        // Create player at spawn
-        const spawn = this.world.getSpawnPosition();
-        this.player = new Player(spawn.x, spawn.y);
+            // Create player at spawn
+            console.log('Creating player...');
+            const spawn = this.world.getSpawnPosition();
+            console.log('Spawn position:', spawn);
+            this.player = new Player(spawn.x, spawn.y);
+            console.log('Player created.');
 
-        // Setup camera
-        this.camera.follow(this.player);
+            // Setup camera
+            this.camera.follow(this.player);
+            console.log('Camera set up.');
 
-        // Hide loading screen
-        this.ui.hideLoadingScreen();
+            // Hide loading screen
+            this.ui.hideLoadingScreen();
+            console.log('Loading screen hidden.');
 
-        // Change state
-        this.state = GAME_STATES.PLAYING;
+            // Change state
+            this.state = GAME_STATES.PLAYING;
 
-        // Show welcome message
-        this.ui.addMessage('Welcome to Wyrmroot Excavation', 'discovery');
-        this.ui.addMessage('Follow the glowing veins deep into the earth...', 'normal');
+            // Show welcome message
+            this.ui.addMessage('Welcome to Wyrmroot Excavation', 'discovery');
+            this.ui.addMessage('Follow the glowing veins deep into the earth...', 'normal');
 
-        console.log('Game initialized!');
+            console.log('Game initialized successfully!');
+        } catch (error) {
+            console.error('Error during game initialization:', error);
+            throw error;
+        }
     }
 
     /**

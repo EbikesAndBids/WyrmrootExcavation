@@ -15,22 +15,35 @@ document.addEventListener('DOMContentLoaded', async () => {
     console.log('  v0.1.0 - Development Build');
     console.log('=================================');
 
-    // Create and initialize the game
-    const game = new Game();
+    const loadingContent = document.querySelector('.loading-content');
+    const loadingP = loadingContent?.querySelector('p');
 
     try {
+        if (loadingP) loadingP.textContent = 'Creating game instance...';
+        console.log('Creating game instance...');
+
+        // Create the game
+        const game = new Game();
+
+        if (loadingP) loadingP.textContent = 'Loading assets...';
+        console.log('Initializing game...');
+
         await game.init();
+
+        console.log('Starting game loop...');
         game.run();
+
     } catch (error) {
         console.error('Failed to initialize game:', error);
+        console.error(error.stack);
 
         // Show error to user
-        const loadingContent = document.querySelector('.loading-content');
         if (loadingContent) {
             loadingContent.innerHTML = `
                 <h1 style="color: #ff4444;">Error</h1>
                 <p>Failed to initialize game.</p>
                 <p style="font-size: 12px; color: #666;">${error.message}</p>
+                <p style="font-size: 10px; color: #444; margin-top: 10px;">Check browser console for details</p>
             `;
         }
     }

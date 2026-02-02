@@ -111,13 +111,37 @@ class AssetManager {
     }
 
     /**
-     * Load an image from a path
+     * Load an image from a path with timeout
      */
     loadImage(path) {
         return new Promise((resolve, reject) => {
             const img = new Image();
-            img.onload = () => resolve(img);
-            img.onerror = () => reject(new Error(`Failed to load: ${path}`));
+            let settled = false;
+
+            // Timeout after 2 seconds
+            const timeout = setTimeout(() => {
+                if (!settled) {
+                    settled = true;
+                    reject(new Error(`Timeout loading: ${path}`));
+                }
+            }, 2000);
+
+            img.onload = () => {
+                if (!settled) {
+                    settled = true;
+                    clearTimeout(timeout);
+                    resolve(img);
+                }
+            };
+
+            img.onerror = () => {
+                if (!settled) {
+                    settled = true;
+                    clearTimeout(timeout);
+                    reject(new Error(`Failed to load: ${path}`));
+                }
+            };
+
             img.src = path;
         });
     }
