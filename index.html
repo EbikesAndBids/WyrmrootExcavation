@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Wyrmroot Excavation</title>
+    <link rel="stylesheet" href="styles/main.css">
+</head>
+<body>
+    <div id="game-container">
+        <canvas id="game-canvas"></canvas>
+        <div id="ui-overlay">
+            <div id="resource-bar">
+                <div class="resource" id="health-display">
+                    <span class="resource-icon">&#9829;</span>
+                    <span class="resource-value">100</span>
+                </div>
+                <div class="resource" id="sap-display">
+                    <span class="resource-icon sap-icon"></span>
+                    <span class="resource-value">0</span>
+                </div>
+                <div class="resource" id="depth-display">
+                    <span class="resource-label">Depth:</span>
+                    <span class="resource-value">0m</span>
+                </div>
+            </div>
+            <div id="minimap-container">
+                <canvas id="minimap-canvas"></canvas>
+            </div>
+            <div id="tool-bar">
+                <div class="tool-slot active" data-tool="drill">
+                    <span class="tool-key">1</span>
+                </div>
+                <div class="tool-slot" data-tool="sonar">
+                    <span class="tool-key">2</span>
+                </div>
+                <div class="tool-slot" data-tool="pipe">
+                    <span class="tool-key">3</span>
+                </div>
+                <div class="tool-slot" data-tool="extractor">
+                    <span class="tool-key">4</span>
+                </div>
+            </div>
+            <div id="message-log"></div>
+        </div>
+        <div id="loading-screen">
+            <div class="loading-content">
+                <h1>Wyrmroot Excavation</h1>
+                <p>Initializing dig site...</p>
+                <div class="loading-bar">
+                    <div class="loading-fill"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <script type="module" src="src/main.js"></script>
+</body>
+</html>
