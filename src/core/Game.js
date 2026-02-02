@@ -17,7 +17,14 @@ import { UIManager } from '../ui/UIManager.js';
 export class Game {
     constructor() {
         this.canvas = document.getElementById('game-canvas');
+        if (!this.canvas) {
+            throw new Error('Could not find game-canvas element');
+        }
+
         this.ctx = this.canvas.getContext('2d');
+        if (!this.ctx) {
+            throw new Error('Could not get 2D context from canvas');
+        }
 
         // Set canvas size
         this.canvas.width = CANVAS_WIDTH;
@@ -25,6 +32,8 @@ export class Game {
 
         // Disable image smoothing
         this.ctx.imageSmoothingEnabled = false;
+
+        console.log(`Canvas initialized: ${CANVAS_WIDTH}x${CANVAS_HEIGHT}`);
 
         // Game state
         this.state = GAME_STATES.LOADING;
