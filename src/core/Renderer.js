@@ -1,34 +1,66 @@
 /**
- * Renderer System
- * Handles all canvas drawing operations with layered rendering
+ * Renderer System - Optimized
+ * Handles all canvas drawing operations with performance optimizations
  */
 
-import { TILE_SIZE, TILE_TYPES, TILE_PROPERTIES, GLOW_COLORS } from './Constants.js';
+import { TILE_SIZE, TILE_TYPES, TILE_PROPERTIES } from './Constants.js';
 import { assetManager } from './AssetManager.js';
 
 export class Renderer {
     constructor(canvas) {
         this.canvas = canvas;
-        this.ctx = canvas.getContext('2d');
+        this.ctx = canvas.getContext('2d', { alpha: false });
 
         // Disable image smoothing for crisp pixels
         this.ctx.imageSmoothingEnabled = false;
 
-        // Layers for different render passes
-        this.layers = {
-            background: [],
-            tiles: [],
-            entities: [],
-            effects: [],
-            ui: [],
-        };
-
-        // Lighting system
-        this.ambientLight = 0.3;
-        this.lightSources = [];
-
         // Particle systems
         this.particles = [];
+
+        // Cached glow colors (simple RGBA strings instead of gradients)
+        this.glowColors = {
+            [TILE_TYPES.CAPILLARY]: 'rgba(0, 170, 119, 0.15)',
+            [TILE_TYPES.DRAGON_ROOT]: 'rgba(0, 255, 170, 0.25)',
+            [TILE_TYPES.ROOT_CORE]: 'rgba(0, 255, 221, 0.35)',
+        };
+
+        // Pre-render glow sprite
+        this.glowSprite = this.createGlowSprite();
+
+        // Minimap throttling
+        this.minimapFrameCounter = 0;
+        this.minimapUpdateInterval = 6; // Update every 6 frames
+
+        // Cache for background color
+        this.lastDepthRange = -1;
+        this.backgroundColors = null;
+
+        // Pulse value (updated once per frame, not per tile)
+        this.pulseValue = 1;
+    }
+
+    /**
+     * Create a pre-rendered glow sprite
+     */
+    createGlowSprite() {
+        const size = TILE_SIZE * 3;
+        const canvas = document.createElement('canvas');
+        canvas.width = size;
+        canvas.height = size;
+        const ctx = canvas.getContext('2d');
+
+        const gradient = ctx.createRadialGradient(
+            size / 2, size / 2, 0,
+            size / 2, size / 2, size / 2
+        );
+        gradient.addColorStop(0, 'rgba(255, 255, 255, 0.3)');
+        gradient.addColorStop(0.5, 'rgba(255, 255, 255, 0.1)');
+        gradient.addColorStop(1, 'rgba(255, 255, 255, 0)');
+
+        ctx.fillStyle = gradient;
+        ctx.fillRect(0, 0, size, size);
+
+        return canvas;
     }
 
     /**
@@ -45,10 +77,13 @@ export class Renderer {
     begin(camera) {
         this.clear();
 
+        // Update pulse once per frame
+        this.pulseValue = 0.8 + Math.sin(performance.now() / 500) * 0.2;
+
         // Save state and apply camera transform
         this.ctx.save();
         const pos = camera.getRenderPosition();
-        this.ctx.translate(-pos.x, -pos.y);
+        this.ctx.translate(Math.round(-pos.x), Math.round(-pos.y));
     }
 
     /**
@@ -59,49 +94,46 @@ export class Renderer {
     }
 
     /**
-     * Draw background gradient based on depth
+     * Get depth range for background caching
+     */
+    getDepthRange(depth) {
+        if (depth < 20) return 0;
+        if (depth < 100) return 1;
+        if (depth < 300) return 2;
+        if (depth < 600) return 3;
+        return 4;
+    }
+
+    /**
+     * Draw background - simplified solid colors instead of gradient
      */
     drawBackground(camera, depth) {
         const pos = camera.getRenderPosition();
+        const depthRange = this.getDepthRange(depth);
 
-        // Create gradient based on depth (in world coordinates since canvas is translated)
-        const gradient = this.ctx.createLinearGradient(pos.x, pos.y, pos.x, pos.y + this.canvas.height);
+        // Use cached colors
+        const colors = [
+            '#1a1512', // Surface
+            '#0f0d0a', // Shallow
+            '#080606', // Deep
+            '#040404', // Abyss
+            '#020202', // Core
+        ];
 
-        // Surface colors
-        if (depth < 20) {
-            gradient.addColorStop(0, '#1a1512');
-            gradient.addColorStop(1, '#0f0d0a');
-        }
-        // Shallow earth
-        else if (depth < 100) {
-            gradient.addColorStop(0, '#0f0d0a');
-            gradient.addColorStop(1, '#080606');
-        }
-        // Deep stone
-        else if (depth < 300) {
-            gradient.addColorStop(0, '#080606');
-            gradient.addColorStop(1, '#040404');
-        }
-        // Abyss
-        else if (depth < 600) {
-            gradient.addColorStop(0, '#040404');
-            gradient.addColorStop(1, '#020202');
-        }
-        // Dragon core
-        else {
-            gradient.addColorStop(0, '#020202');
-            gradient.addColorStop(1, '#010101');
-        }
-
-        this.ctx.fillStyle = gradient;
+        this.ctx.fillStyle = colors[depthRange];
         this.ctx.fillRect(pos.x, pos.y, this.canvas.width, this.canvas.height);
     }
 
     /**
-     * Draw visible tiles from the world
+     * Draw visible tiles from the world - optimized
      */
     drawTiles(world, camera) {
         const range = camera.getVisibleTileRange();
+        const ctx = this.ctx;
+
+        // Batch similar tiles together
+        let currentSprite = null;
+        let glowTiles = [];
 
         for (let y = range.startY; y <= range.endY; y++) {
             for (let x = range.startX; x <= range.endX; x++) {
@@ -111,199 +143,132 @@ export class Renderer {
                 const screenX = x * TILE_SIZE;
                 const screenY = y * TILE_SIZE;
 
-                // Draw tile sprite or placeholder
+                // Draw tile sprite
                 const sprite = assetManager.getTileSprite(tile);
                 if (sprite) {
-                    this.ctx.drawImage(sprite, screenX, screenY, TILE_SIZE, TILE_SIZE);
+                    ctx.drawImage(sprite, screenX, screenY, TILE_SIZE, TILE_SIZE);
                 }
 
-                // Draw glow effect for special tiles
+                // Collect glow tiles for batch rendering
                 const props = TILE_PROPERTIES[tile];
                 if (props && props.glows) {
-                    this.drawTileGlow(screenX, screenY, tile);
+                    glowTiles.push({ x: screenX, y: screenY, type: tile });
                 }
             }
         }
-    }
 
-    /**
-     * Draw glow effect for bioluminescent tiles
-     */
-    drawTileGlow(x, y, tileType) {
-        const glowColor = this.getGlowColor(tileType);
-        if (!glowColor) return;
-
-        const centerX = x + TILE_SIZE / 2;
-        const centerY = y + TILE_SIZE / 2;
-        const radius = TILE_SIZE * 1.5;
-
-        // Pulsing effect
-        const pulse = 0.8 + Math.sin(Date.now() / 500) * 0.2;
-
-        const gradient = this.ctx.createRadialGradient(
-            centerX, centerY, 0,
-            centerX, centerY, radius * pulse
-        );
-
-        gradient.addColorStop(0, glowColor);
-        gradient.addColorStop(1, 'transparent');
-
-        this.ctx.fillStyle = gradient;
-        this.ctx.fillRect(x - TILE_SIZE, y - TILE_SIZE, TILE_SIZE * 3, TILE_SIZE * 3);
-    }
-
-    getGlowColor(tileType) {
-        switch (tileType) {
-            case TILE_TYPES.CAPILLARY:
-                return GLOW_COLORS.CAPILLARY;
-            case TILE_TYPES.DRAGON_ROOT:
-                return GLOW_COLORS.DRAGON_ROOT;
-            case TILE_TYPES.ROOT_CORE:
-                return GLOW_COLORS.ROOT_CORE;
-            default:
-                return null;
+        // Batch render glow effects
+        if (glowTiles.length > 0) {
+            ctx.globalCompositeOperation = 'lighter';
+            for (const glow of glowTiles) {
+                const color = this.glowColors[glow.type];
+                if (color) {
+                    ctx.fillStyle = color;
+                    ctx.fillRect(
+                        glow.x - TILE_SIZE,
+                        glow.y - TILE_SIZE,
+                        TILE_SIZE * 3,
+                        TILE_SIZE * 3
+                    );
+                }
+            }
+            ctx.globalCompositeOperation = 'source-over';
         }
     }
 
     /**
-     * Draw an entity
-     */
-    drawEntity(entity) {
-        if (entity.sprite) {
-            this.ctx.drawImage(
-                entity.sprite,
-                Math.floor(entity.x),
-                Math.floor(entity.y),
-                entity.width,
-                entity.height
-            );
-        } else {
-            // Fallback rectangle
-            this.ctx.fillStyle = entity.color || '#ff00ff';
-            this.ctx.fillRect(
-                Math.floor(entity.x),
-                Math.floor(entity.y),
-                entity.width,
-                entity.height
-            );
-        }
-    }
-
-    /**
-     * Draw the player
+     * Draw the player - simplified
      */
     drawPlayer(player) {
         const sprite = assetManager.getSprite('player_idle');
+        const px = Math.round(player.x);
+        const py = Math.round(player.y);
 
         if (sprite) {
-            // Flip sprite based on facing direction
-            this.ctx.save();
             if (player.facingLeft) {
-                this.ctx.translate(player.x + player.width, player.y);
+                this.ctx.save();
+                this.ctx.translate(px + player.width, py);
                 this.ctx.scale(-1, 1);
                 this.ctx.drawImage(sprite, 0, 0, player.width, player.height);
+                this.ctx.restore();
             } else {
-                this.ctx.drawImage(sprite, player.x, player.y, player.width, player.height);
+                this.ctx.drawImage(sprite, px, py, player.width, player.height);
             }
-            this.ctx.restore();
         } else {
-            // Fallback
             this.ctx.fillStyle = '#44aaff';
-            this.ctx.fillRect(player.x, player.y, player.width, player.height);
+            this.ctx.fillRect(px, py, player.width, player.height);
         }
 
-        // Draw helmet glow
-        this.drawHelmetGlow(player);
-    }
-
-    /**
-     * Draw the bioluminescent helmet glow
-     */
-    drawHelmetGlow(player) {
-        const glowRadius = 80;
-        const centerX = player.x + player.width / 2;
-        const centerY = player.y + 8;
-
-        const gradient = this.ctx.createRadialGradient(
-            centerX, centerY, 0,
-            centerX, centerY, glowRadius
-        );
-
-        gradient.addColorStop(0, 'rgba(0, 255, 170, 0.3)');
-        gradient.addColorStop(0.5, 'rgba(0, 255, 170, 0.1)');
-        gradient.addColorStop(1, 'transparent');
-
-        this.ctx.fillStyle = gradient;
-        this.ctx.fillRect(
-            centerX - glowRadius,
-            centerY - glowRadius,
-            glowRadius * 2,
-            glowRadius * 2
-        );
+        // Simplified helmet glow - just a colored circle
+        this.ctx.globalCompositeOperation = 'lighter';
+        this.ctx.fillStyle = 'rgba(0, 255, 170, 0.15)';
+        this.ctx.beginPath();
+        this.ctx.arc(px + player.width / 2, py + 8, 60, 0, Math.PI * 2);
+        this.ctx.fill();
+        this.ctx.globalCompositeOperation = 'source-over';
     }
 
     /**
      * Draw sonar ping effect
      */
     drawSonarPing(x, y, radius, alpha) {
+        if (alpha < 0.01) return;
+
         this.ctx.strokeStyle = `rgba(68, 170, 255, ${alpha})`;
         this.ctx.lineWidth = 3;
-
         this.ctx.beginPath();
         this.ctx.arc(x, y, radius, 0, Math.PI * 2);
-        this.ctx.stroke();
-
-        // Inner ring
-        this.ctx.strokeStyle = `rgba(68, 170, 255, ${alpha * 0.5})`;
-        this.ctx.lineWidth = 1;
-        this.ctx.beginPath();
-        this.ctx.arc(x, y, radius * 0.7, 0, Math.PI * 2);
         this.ctx.stroke();
     }
 
     /**
-     * Draw sonar revealed area
+     * Draw sonar revealed area - optimized with batching
      */
     drawSonarReveal(revealedTiles, alpha) {
-        this.ctx.fillStyle = `rgba(68, 170, 255, ${alpha * 0.1})`;
+        if (alpha < 0.01 || revealedTiles.length === 0) return;
+
+        const ctx = this.ctx;
+
+        // Group tiles by type for batched rendering
+        const normalTiles = [];
+        const specialTiles = [];
 
         for (const tile of revealedTiles) {
-            const screenX = tile.x * TILE_SIZE;
-            const screenY = tile.y * TILE_SIZE;
-
-            // Highlight special tiles
-            if (tile.type === TILE_TYPES.DRAGON_ROOT || tile.type === TILE_TYPES.ROOT_CORE) {
-                this.ctx.fillStyle = `rgba(0, 255, 170, ${alpha * 0.4})`;
-            } else if (tile.type === TILE_TYPES.CAPILLARY) {
-                this.ctx.fillStyle = `rgba(0, 170, 119, ${alpha * 0.3})`;
-            } else if (tile.type >= TILE_TYPES.FOSSIL_BONE && tile.type <= TILE_TYPES.FOSSIL_TOOTH) {
-                this.ctx.fillStyle = `rgba(212, 196, 168, ${alpha * 0.3})`;
+            if (tile.type === TILE_TYPES.DRAGON_ROOT ||
+                tile.type === TILE_TYPES.ROOT_CORE ||
+                tile.type === TILE_TYPES.CAPILLARY ||
+                (tile.type >= TILE_TYPES.FOSSIL_BONE && tile.type <= TILE_TYPES.FOSSIL_TOOTH)) {
+                specialTiles.push(tile);
             } else {
-                this.ctx.fillStyle = `rgba(68, 170, 255, ${alpha * 0.1})`;
+                normalTiles.push(tile);
             }
+        }
 
-            this.ctx.fillRect(screenX, screenY, TILE_SIZE, TILE_SIZE);
+        // Draw normal tiles in one batch
+        if (normalTiles.length > 0) {
+            ctx.fillStyle = `rgba(68, 170, 255, ${alpha * 0.1})`;
+            for (const tile of normalTiles) {
+                ctx.fillRect(tile.x * TILE_SIZE, tile.y * TILE_SIZE, TILE_SIZE, TILE_SIZE);
+            }
+        }
+
+        // Draw special tiles
+        if (specialTiles.length > 0) {
+            ctx.fillStyle = `rgba(0, 255, 170, ${alpha * 0.3})`;
+            for (const tile of specialTiles) {
+                ctx.fillRect(tile.x * TILE_SIZE, tile.y * TILE_SIZE, TILE_SIZE, TILE_SIZE);
+            }
         }
     }
 
     /**
-     * Draw drill effect
+     * Draw drill effect - simplified
      */
     drawDrillEffect(x, y, progress) {
         const centerX = x + TILE_SIZE / 2;
         const centerY = y + TILE_SIZE / 2;
 
-        // Drilling particles
-        this.ctx.fillStyle = '#aa7744';
-        for (let i = 0; i < 5; i++) {
-            const angle = (i / 5) * Math.PI * 2 + Date.now() / 100;
-            const dist = 8 + progress * 4;
-            const px = centerX + Math.cos(angle) * dist;
-            const py = centerY + Math.sin(angle) * dist;
-            this.ctx.fillRect(px - 1, py - 1, 2, 2);
-        }
-
-        // Progress indicator
+        // Simple progress arc
         this.ctx.strokeStyle = '#ff8844';
         this.ctx.lineWidth = 2;
         this.ctx.beginPath();
@@ -324,24 +289,10 @@ export class Renderer {
     }
 
     /**
-     * Draw particle
-     */
-    drawParticle(particle) {
-        this.ctx.globalAlpha = particle.alpha;
-        this.ctx.fillStyle = particle.color;
-        this.ctx.fillRect(
-            particle.x - particle.size / 2,
-            particle.y - particle.size / 2,
-            particle.size,
-            particle.size
-        );
-        this.ctx.globalAlpha = 1;
-    }
-
-    /**
      * Add a particle
      */
     addParticle(x, y, vx, vy, color, size, life) {
+        if (this.particles.length > 100) return; // Limit particles
         this.particles.push({
             x, y, vx, vy, color, size, life,
             maxLife: life,
@@ -353,8 +304,15 @@ export class Renderer {
      * Create mining particles
      */
     createMiningParticles(x, y, tileType) {
-        const color = this.getTileParticleColor(tileType);
-        for (let i = 0; i < 8; i++) {
+        const colors = {
+            [TILE_TYPES.DIRT]: '#6a5738',
+            [TILE_TYPES.STONE]: '#7a7a7a',
+            [TILE_TYPES.CAPILLARY]: '#00ffaa',
+            [TILE_TYPES.DRAGON_ROOT]: '#00ffdd',
+        };
+        const color = colors[tileType] || '#888888';
+
+        for (let i = 0; i < 6; i++) {
             const angle = Math.random() * Math.PI * 2;
             const speed = 1 + Math.random() * 2;
             this.addParticle(
@@ -364,71 +322,52 @@ export class Renderer {
                 Math.sin(angle) * speed - 1,
                 color,
                 2 + Math.random() * 2,
-                30 + Math.random() * 20
+                20 + Math.random() * 15
             );
         }
     }
 
-    getTileParticleColor(tileType) {
-        switch (tileType) {
-            case TILE_TYPES.DIRT: return '#6a5738';
-            case TILE_TYPES.STONE: return '#7a7a7a';
-            case TILE_TYPES.CAPILLARY: return '#00ffaa';
-            case TILE_TYPES.DRAGON_ROOT: return '#00ffdd';
-            default: return '#888888';
-        }
-    }
-
     /**
-     * Update and draw all particles
+     * Update and draw all particles - optimized
      */
     updateParticles() {
-        for (let i = this.particles.length - 1; i >= 0; i--) {
-            const p = this.particles[i];
+        const ctx = this.ctx;
+        const particles = this.particles;
 
-            // Update
+        for (let i = particles.length - 1; i >= 0; i--) {
+            const p = particles[i];
+
             p.x += p.vx;
             p.y += p.vy;
-            p.vy += 0.1; // Gravity
+            p.vy += 0.15;
             p.life--;
             p.alpha = p.life / p.maxLife;
 
-            // Draw
-            this.drawParticle(p);
-
-            // Remove dead particles
             if (p.life <= 0) {
-                this.particles.splice(i, 1);
+                particles.splice(i, 1);
+                continue;
             }
+
+            ctx.globalAlpha = p.alpha;
+            ctx.fillStyle = p.color;
+            ctx.fillRect(p.x - 1, p.y - 1, p.size, p.size);
         }
+        ctx.globalAlpha = 1;
     }
 
     /**
-     * Draw extraction pipeline
-     */
-    drawPipeline(pipeline) {
-        for (const segment of pipeline.segments) {
-            const x = segment.x * TILE_SIZE;
-            const y = segment.y * TILE_SIZE;
-
-            // Draw pipe
-            this.ctx.fillStyle = '#666666';
-            this.ctx.fillRect(x + 4, y + 6, TILE_SIZE - 8, 4);
-
-            // Draw sap flow if active
-            if (segment.flowing) {
-                const flowOffset = (Date.now() / 100) % TILE_SIZE;
-                this.ctx.fillStyle = '#00ffaa';
-                this.ctx.fillRect(x + flowOffset, y + 7, 4, 2);
-            }
-        }
-    }
-
-    /**
-     * Draw minimap
+     * Draw minimap - throttled and optimized
      */
     drawMinimap(ctx, world, player, width, height) {
-        const scale = 0.5;
+        this.minimapFrameCounter++;
+
+        // Only update every N frames
+        if (this.minimapFrameCounter < this.minimapUpdateInterval) {
+            return;
+        }
+        this.minimapFrameCounter = 0;
+
+        const scale = 1; // Larger pixels = faster
         const playerTileX = Math.floor(player.x / TILE_SIZE);
         const playerTileY = Math.floor(player.y / TILE_SIZE);
 
@@ -438,8 +377,24 @@ export class Renderer {
         const startX = playerTileX - Math.floor(viewWidth / 2);
         const startY = playerTileY - Math.floor(viewHeight / 2);
 
+        // Clear
         ctx.fillStyle = '#0a0a0a';
         ctx.fillRect(0, 0, width, height);
+
+        // Use ImageData for faster pixel manipulation
+        const imageData = ctx.createImageData(width, height);
+        const data = imageData.data;
+
+        const colors = {
+            [TILE_TYPES.DIRT]: [58, 39, 24],
+            [TILE_TYPES.STONE]: [74, 74, 74],
+            [TILE_TYPES.HARD_STONE]: [50, 50, 50],
+            [TILE_TYPES.CAPILLARY]: [0, 170, 119],
+            [TILE_TYPES.DRAGON_ROOT]: [0, 255, 170],
+            [TILE_TYPES.ROOT_CORE]: [0, 255, 221],
+            [TILE_TYPES.BEDROCK]: [30, 30, 30],
+        };
+        const defaultColor = [51, 51, 51];
 
         for (let y = 0; y < viewHeight; y++) {
             for (let x = 0; x < viewWidth; x++) {
@@ -449,30 +404,34 @@ export class Renderer {
 
                 if (tile === TILE_TYPES.AIR) continue;
 
-                // Get color
-                let color;
-                switch (tile) {
-                    case TILE_TYPES.DIRT: color = '#3a2718'; break;
-                    case TILE_TYPES.STONE: color = '#4a4a4a'; break;
-                    case TILE_TYPES.CAPILLARY: color = '#00aa77'; break;
-                    case TILE_TYPES.DRAGON_ROOT: color = '#00ffaa'; break;
-                    case TILE_TYPES.ROOT_CORE: color = '#00ffdd'; break;
-                    default: color = '#333333';
-                }
+                const color = colors[tile] || defaultColor;
+                const pixelIndex = (y * width + x) * 4;
 
-                ctx.fillStyle = color;
-                ctx.fillRect(x * scale, y * scale, scale, scale);
+                data[pixelIndex] = color[0];
+                data[pixelIndex + 1] = color[1];
+                data[pixelIndex + 2] = color[2];
+                data[pixelIndex + 3] = 255;
             }
         }
 
         // Draw player marker
-        ctx.fillStyle = '#44aaff';
-        ctx.fillRect(
-            (viewWidth / 2) * scale - 1,
-            (viewHeight / 2) * scale - 1,
-            3,
-            3
-        );
+        const markerX = Math.floor(viewWidth / 2);
+        const markerY = Math.floor(viewHeight / 2);
+        for (let dy = -1; dy <= 1; dy++) {
+            for (let dx = -1; dx <= 1; dx++) {
+                const px = markerX + dx;
+                const py = markerY + dy;
+                if (px >= 0 && px < width && py >= 0 && py < height) {
+                    const idx = (py * width + px) * 4;
+                    data[idx] = 68;
+                    data[idx + 1] = 170;
+                    data[idx + 2] = 255;
+                    data[idx + 3] = 255;
+                }
+            }
+        }
+
+        ctx.putImageData(imageData, 0, 0);
     }
 }
 
