@@ -1,10 +1,11 @@
 /**
  * Player Entity
  * Handles player movement, physics, and interactions
+ * Updated for oxygen/heat survival mechanics
  */
 
 import {
-    PLAYER, TILE_SIZE, TILE_TYPES, TILE_PROPERTIES, TOOLS, SONAR
+    PLAYER, TILE_SIZE, TILE_TYPES, TILE_PROPERTIES, TOOLS, SONAR, BIOMES, LIVING_TOOLS
 } from '../core/Constants.js';
 import { input } from '../core/Input.js';
 
@@ -26,16 +27,28 @@ export class Player {
         this.isDrilling = false;
         this.drillProgress = 0;
         this.drillTarget = null;
+        this.isClimbing = false;
+        this.isGliding = false;
 
         // Stats
         this.health = PLAYER.MAX_HEALTH;
         this.maxHealth = PLAYER.MAX_HEALTH;
         this.oxygen = PLAYER.MAX_OXYGEN;
         this.maxOxygen = PLAYER.MAX_OXYGEN;
+        this.heat = 0;
+        this.maxHeat = PLAYER.MAX_HEAT;
         this.drillPower = PLAYER.DRILL_POWER;
 
         // Tool
         this.currentTool = TOOLS.DRILL;
+
+        // Living Tools equipped
+        this.livingTools = {
+            excavator: null,
+            movement: null,
+            vision: null,
+            storage: null,
+        };
 
         // Sonar
         this.sonarCooldown = 0;
@@ -44,22 +57,72 @@ export class Player {
         this.sonarRevealedTiles = [];
         this.sonarCenter = { x: 0, y: 0 };
 
-        // Inventory
+        // Inventory - expanded for three biomes
         this.inventory = {
-            wyrmSap: 0,
-            wyrmSapPure: 0,
-            dragonBone: 0,
-            dragonClaw: 0,
-            dragonTooth: 0,
+            // Vitae materials
+            vitae_sap_small: 0,
+            vitae_sap: 0,
+            vitae_sap_pure: 0,
+            // Ignis materials
+            ignis_plasma_small: 0,
+            ignis_plasma: 0,
+            ignis_plasma_pure: 0,
+            // Umbra materials
+            umbra_ichor_small: 0,
+            umbra_ichor: 0,
+            umbra_ichor_pure: 0,
+            // Fossils
+            dragon_bone: 0,
+            dragon_claw: 0,
+            dragon_tooth: 0,
+            dragon_skull: 0,
+            dragon_ribcage: 0,
+            // Terrain materials
             dirt: 0,
             stone: 0,
+            petrified_wood: 0,
+            amber: 0,
+            gravel: 0,
+            volcanic_rock: 0,
+            basalt: 0,
+            obsidian: 0,
+            ash: 0,
+            void_stone: 0,
+            crystal: 0,
+            floating_rock: 0,
+            shadow_glass: 0,
+            // Equipment
             pipe: 5,
             extractor: 1,
+            turret: 2,
+            oxygen_station: 1,
         };
+
+        // Currency
+        this.money = 0;
 
         // Animation
         this.animationFrame = 0;
         this.animationTimer = 0;
+
+        // Hazard state
+        this.inFluid = null;
+        this.nearHeat = false;
+        this.inGas = false;
+
+        // Status effects
+        this.effects = [];
+    }
+
+    /**
+     * Get current biome based on depth
+     */
+    getCurrentBiome() {
+        const depth = this.getDepth();
+        if (depth < BIOMES.SURFACE.maxDepth) return BIOMES.SURFACE;
+        if (depth < BIOMES.VERDANT_CRUST.maxDepth) return BIOMES.VERDANT_CRUST;
+        if (depth < BIOMES.MAGMA_RIBS.maxDepth) return BIOMES.MAGMA_RIBS;
+        return BIOMES.ABYSSAL_DEEP;
     }
 
     /**
@@ -68,8 +131,136 @@ export class Player {
     update(deltaTime, world) {
         this.handleInput(world);
         this.applyPhysics(deltaTime, world);
+        this.updateSurvival(deltaTime, world);
         this.updateSonar(deltaTime, world);
+        this.updateEffects(deltaTime);
         this.updateAnimation(deltaTime);
+    }
+
+    /**
+     * Update survival mechanics (oxygen/heat)
+     */
+    updateSurvival(deltaTime, world) {
+        const biome = this.getCurrentBiome();
+        const depth = this.getDepth();
+
+        // Reset hazard states
+        this.nearHeat = false;
+        this.inFluid = null;
+        this.inGas = false;
+
+        // Check surrounding tiles for hazards
+        this.checkHazards(world);
+
+        // Oxygen drain when underground
+        if (depth > BIOMES.SURFACE.maxDepth) {
+            let oxygenDrain = PLAYER.OXYGEN_DRAIN_RATE;
+
+            // Drain faster in deeper biomes
+            if (biome.id === 'magma') oxygenDrain *= 1.5;
+            if (biome.id === 'abyss') oxygenDrain *= 2;
+
+            // Drain faster in toxic gas
+            if (this.inGas) oxygenDrain *= 3;
+
+            this.oxygen -= oxygenDrain * deltaTime;
+
+            // Suffocation damage
+            if (this.oxygen <= 0) {
+                this.oxygen = 0;
+                this.takeDamage(0.1 * deltaTime); // Slow suffocation
+            }
+        } else {
+            // Recover oxygen at surface
+            this.oxygen = Math.min(this.maxOxygen, this.oxygen + 0.1 * deltaTime);
+        }
+
+        // Heat management
+        if (this.nearHeat || biome.id === 'magma') {
+            let heatGain = PLAYER.HEAT_GAIN_RATE;
+
+            // More heat in lava biome
+            if (biome.id === 'magma') heatGain *= 2;
+
+            // Direct contact with lava or hot tiles
+            if (this.inFluid === TILE_TYPES.LAVA) heatGain *= 5;
+
+            this.heat += heatGain * deltaTime;
+
+            // Overheat damage
+            if (this.heat >= this.maxHeat) {
+                this.heat = this.maxHeat;
+                this.takeDamage(0.2 * deltaTime);
+            }
+        } else {
+            // Cool down
+            this.heat = Math.max(0, this.heat - PLAYER.HEAT_DECAY_RATE * deltaTime);
+        }
+
+        // Fluid damage
+        if (this.inFluid) {
+            const props = TILE_PROPERTIES[this.inFluid];
+            if (props && props.damage > 0) {
+                this.takeDamage(props.damage * 0.01 * deltaTime);
+            }
+        }
+    }
+
+    /**
+     * Check surrounding tiles for hazards
+     */
+    checkHazards(world) {
+        const tileX = Math.floor((this.x + this.width / 2) / TILE_SIZE);
+        const tileY = Math.floor((this.y + this.height / 2) / TILE_SIZE);
+
+        // Check tiles in a 3x3 around player
+        for (let dy = -1; dy <= 1; dy++) {
+            for (let dx = -1; dx <= 1; dx++) {
+                const tile = world.getTile(tileX + dx, tileY + dy);
+                const props = TILE_PROPERTIES[tile];
+
+                if (props) {
+                    if (props.hot) this.nearHeat = true;
+                    if (props.fluid && (dx === 0 && dy === 0)) this.inFluid = tile;
+                    if (props.gas && (dx === 0 && dy === 0)) this.inGas = true;
+                }
+            }
+        }
+    }
+
+    /**
+     * Update status effects
+     */
+    updateEffects(deltaTime) {
+        for (let i = this.effects.length - 1; i >= 0; i--) {
+            const effect = this.effects[i];
+            effect.duration -= deltaTime;
+
+            if (effect.duration <= 0) {
+                this.effects.splice(i, 1);
+            }
+        }
+    }
+
+    /**
+     * Add a status effect
+     */
+    addEffect(type, duration, magnitude = 1) {
+        // Check for existing effect
+        const existing = this.effects.find(e => e.type === type);
+        if (existing) {
+            existing.duration = Math.max(existing.duration, duration);
+            return;
+        }
+
+        this.effects.push({ type, duration, magnitude });
+    }
+
+    /**
+     * Check if player has an effect
+     */
+    hasEffect(type) {
+        return this.effects.some(e => e.type === type);
     }
 
     /**
@@ -77,6 +268,12 @@ export class Player {
      */
     handleInput(world) {
         const horizontal = input.getHorizontal();
+
+        // Check for living tool movement abilities
+        const movementTool = this.livingTools.movement;
+        const canWallClimb = movementTool && LIVING_TOOLS[movementTool.toUpperCase()]?.wallClimb;
+        const canDoubleJump = movementTool && LIVING_TOOLS[movementTool.toUpperCase()]?.doubleJump;
+        const canGlide = movementTool && LIVING_TOOLS[movementTool.toUpperCase()]?.glide;
 
         // Horizontal movement
         if (horizontal !== 0) {
@@ -88,17 +285,53 @@ export class Player {
             if (Math.abs(this.vx) < 0.1) this.vx = 0;
         }
 
-        // Jump
-        if (input.isActionJustPressed('JUMP') && this.grounded) {
-            this.vy = -PLAYER.JUMP_FORCE;
-            this.grounded = false;
+        // Wall climbing
+        if (canWallClimb && !this.grounded && horizontal !== 0) {
+            const wallX = horizontal > 0 ?
+                Math.floor((this.x + this.width + 2) / TILE_SIZE) :
+                Math.floor((this.x - 2) / TILE_SIZE);
+            const wallY = Math.floor((this.y + this.height / 2) / TILE_SIZE);
+
+            if (world.isSolid(wallX, wallY)) {
+                this.isClimbing = true;
+                this.vy = input.getVertical() * -PLAYER.SPEED * 0.7;
+            } else {
+                this.isClimbing = false;
+            }
+        } else {
+            this.isClimbing = false;
+        }
+
+        // Jump / Double jump
+        if (input.isActionJustPressed('JUMP')) {
+            if (this.grounded || this.isClimbing) {
+                this.vy = -PLAYER.JUMP_FORCE;
+                this.grounded = false;
+                this.isClimbing = false;
+            } else if (canDoubleJump && !this.hasEffect('double_jumped')) {
+                this.vy = -PLAYER.JUMP_FORCE * 0.8;
+                this.addEffect('double_jumped', 100);
+            }
+        }
+
+        // Gliding
+        if (canGlide && !this.grounded && this.vy > 0 && input.isActionPressed('JUMP')) {
+            this.isGliding = true;
+            this.vy = Math.min(this.vy, 2); // Slow fall
+        } else {
+            this.isGliding = false;
+        }
+
+        // Reset double jump when grounded
+        if (this.grounded) {
+            this.effects = this.effects.filter(e => e.type !== 'double_jumped');
         }
 
         // Tool selection
         if (input.isActionJustPressed('TOOL_1')) this.currentTool = TOOLS.DRILL;
         if (input.isActionJustPressed('TOOL_2')) this.currentTool = TOOLS.SONAR;
         if (input.isActionJustPressed('TOOL_3')) this.currentTool = TOOLS.PIPE;
-        if (input.isActionJustPressed('TOOL_4')) this.currentTool = TOOLS.EXTRACTOR;
+        if (input.isActionJustPressed('TOOL_4')) this.currentTool = TOOLS.TURRET;
 
         // Tool use
         if (this.currentTool === TOOLS.DRILL) {
@@ -107,6 +340,13 @@ export class Player {
             this.handleSonarActivation(world);
         } else if (this.currentTool === TOOLS.PIPE) {
             this.handlePipePlacement(world);
+        } else if (this.currentTool === TOOLS.TURRET) {
+            this.handleTurretPlacement(world);
+        }
+
+        // Extractor placement (R key)
+        if (input.isActionJustPressed('PLACE_EXTRACTOR')) {
+            this.handleExtractorPlacement(world);
         }
     }
 
@@ -145,6 +385,14 @@ export class Player {
             return;
         }
 
+        // Calculate effective drill power (with living tools bonus)
+        let effectivePower = this.drillPower;
+        const excavatorTool = this.livingTools.excavator;
+        if (excavatorTool) {
+            const toolData = LIVING_TOOLS[excavatorTool.toUpperCase()];
+            if (toolData) effectivePower = toolData.power;
+        }
+
         // Drilling
         if (input.isActionPressed('DRILL')) {
             // Check if target changed
@@ -158,12 +406,12 @@ export class Player {
             this.isDrilling = true;
 
             // Progress based on drill power vs hardness
-            const drillSpeed = this.drillPower / props.hardness;
+            const drillSpeed = effectivePower / props.hardness;
             this.drillProgress += drillSpeed * 0.02;
 
             // Complete drilling
             if (this.drillProgress >= 1) {
-                const drop = world.mineTile(targetTileX, targetTileY, this.drillPower);
+                const drop = world.mineTile(targetTileX, targetTileY, effectivePower);
                 if (drop) {
                     this.collectDrop(drop);
                 }
@@ -203,11 +451,19 @@ export class Player {
             y: this.y + this.height / 2
         };
 
+        // Enhanced range with living tool
+        let range = SONAR.RANGE;
+        const visionTool = this.livingTools.vision;
+        if (visionTool) {
+            const toolData = LIVING_TOOLS[visionTool.toUpperCase()];
+            if (toolData) range = toolData.range;
+        }
+
         // Reveal tiles
         const centerTileX = Math.floor(this.sonarCenter.x / TILE_SIZE);
         const centerTileY = Math.floor(this.sonarCenter.y / TILE_SIZE);
 
-        this.sonarRevealedTiles = world.getTilesInRadius(centerTileX, centerTileY, SONAR.RANGE);
+        this.sonarRevealedTiles = world.getTilesInRadius(centerTileX, centerTileY, range);
 
         // Mark as explored
         for (const tile of this.sonarRevealedTiles) {
@@ -253,34 +509,49 @@ export class Player {
     }
 
     /**
+     * Handle turret placement
+     */
+    handleTurretPlacement(world) {
+        if (input.isActionJustPressed('DRILL') && this.inventory.turret > 0) {
+            const mouseWorld = input.getMouseWorldPosition();
+            const targetTileX = Math.floor(mouseWorld.x / TILE_SIZE);
+            const targetTileY = Math.floor(mouseWorld.y / TILE_SIZE);
+
+            // Check if tile is air and has floor beneath
+            if (world.getTile(targetTileX, targetTileY) === TILE_TYPES.AIR &&
+                world.isSolid(targetTileX, targetTileY + 1)) {
+                world.setTile(targetTileX, targetTileY, TILE_TYPES.TURRET);
+                this.inventory.turret--;
+            }
+        }
+    }
+
+    /**
+     * Handle extractor placement
+     */
+    handleExtractorPlacement(world) {
+        if (this.inventory.extractor > 0) {
+            const mouseWorld = input.getMouseWorldPosition();
+            const targetTileX = Math.floor(mouseWorld.x / TILE_SIZE);
+            const targetTileY = Math.floor(mouseWorld.y / TILE_SIZE);
+
+            const tile = world.getTile(targetTileX, targetTileY);
+            const props = TILE_PROPERTIES[tile];
+
+            // Can only place on extractable roots
+            if (props && props.extractable) {
+                world.setTile(targetTileX, targetTileY, TILE_TYPES.EXTRACTOR);
+                this.inventory.extractor--;
+            }
+        }
+    }
+
+    /**
      * Collect dropped items
      */
     collectDrop(dropType) {
-        switch (dropType) {
-            case 'wyrm_sap_small':
-                this.inventory.wyrmSap += 1;
-                break;
-            case 'wyrm_sap':
-                this.inventory.wyrmSap += 5;
-                break;
-            case 'wyrm_sap_pure':
-                this.inventory.wyrmSapPure += 1;
-                break;
-            case 'dragon_bone':
-                this.inventory.dragonBone += 1;
-                break;
-            case 'dragon_claw':
-                this.inventory.dragonClaw += 1;
-                break;
-            case 'dragon_tooth':
-                this.inventory.dragonTooth += 1;
-                break;
-            case 'dirt':
-                this.inventory.dirt += 1;
-                break;
-            case 'stone':
-                this.inventory.stone += 1;
-                break;
+        if (this.inventory.hasOwnProperty(dropType)) {
+            this.inventory[dropType]++;
         }
     }
 
@@ -288,9 +559,26 @@ export class Player {
      * Apply physics
      */
     applyPhysics(deltaTime, world) {
+        // Skip gravity if climbing
+        if (this.isClimbing) {
+            return;
+        }
+
         // Gravity
         if (!this.grounded) {
-            this.vy += PLAYER.GRAVITY;
+            let gravity = PLAYER.GRAVITY;
+
+            // Reduced gravity in Abyss (gravity distortion)
+            if (this.getCurrentBiome().id === 'abyss') {
+                gravity *= 0.6;
+            }
+
+            // Gliding reduces gravity
+            if (this.isGliding) {
+                gravity *= 0.2;
+            }
+
+            this.vy += gravity;
             if (this.vy > PLAYER.MAX_FALL_SPEED) {
                 this.vy = PLAYER.MAX_FALL_SPEED;
             }
@@ -390,6 +678,31 @@ export class Player {
      */
     heal(amount) {
         this.health = Math.min(this.maxHealth, this.health + amount);
+    }
+
+    /**
+     * Refill oxygen (from oxygen station)
+     */
+    refillOxygen(amount) {
+        this.oxygen = Math.min(this.maxOxygen, this.oxygen + amount);
+    }
+
+    /**
+     * Cool down (from water or coolant)
+     */
+    coolDown(amount) {
+        this.heat = Math.max(0, this.heat - amount);
+    }
+
+    /**
+     * Equip a living tool
+     */
+    equipLivingTool(toolId) {
+        const toolData = LIVING_TOOLS[toolId.toUpperCase()];
+        if (!toolData) return false;
+
+        this.livingTools[toolData.category] = toolId;
+        return true;
     }
 
     /**

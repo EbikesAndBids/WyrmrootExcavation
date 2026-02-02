@@ -1,10 +1,11 @@
 /**
  * Main Game Class
  * Orchestrates all game systems
+ * Updated for three biomes and physics
  */
 
 import {
-    CANVAS_WIDTH, CANVAS_HEIGHT, TILE_SIZE, GAME_STATES, TOOLS
+    CANVAS_WIDTH, CANVAS_HEIGHT, TILE_SIZE, GAME_STATES, TOOLS, BIOMES
 } from './Constants.js';
 import { assetManager } from './AssetManager.js';
 import { input } from './Input.js';
@@ -13,6 +14,7 @@ import { Renderer } from './Renderer.js';
 import { World } from '../world/World.js';
 import { Player } from '../entities/Player.js';
 import { UIManager } from '../ui/UIManager.js';
+import { PhysicsSystem } from '../systems/PhysicsSystem.js';
 
 export class Game {
     constructor() {
@@ -44,6 +46,7 @@ export class Game {
         this.renderer = new Renderer(this.canvas);
         this.world = new World();
         this.ui = new UIManager();
+        this.physics = null; // Initialized after world
         this.player = null;
 
         // Timing
@@ -52,6 +55,7 @@ export class Game {
         this.fps = 0;
         this.frameCount = 0;
         this.fpsTime = 0;
+        this.currentTime = 0;
 
         // Bind input to canvas
         input.setCanvas(this.canvas);
@@ -66,13 +70,17 @@ export class Game {
 
         // Mining feedback
         this.lastMinedTile = null;
+
+        // Extraction state
+        this.extractionActive = false;
+        this.extractionTime = 0;
     }
 
     /**
      * Initialize the game
      */
     async init() {
-        console.log('Initializing Wyrmroot Excavation...');
+        console.log('Initializing Wyrmroot: Deep Excavation...');
 
         try {
             // Load assets
@@ -86,6 +94,11 @@ export class Game {
             console.log('Initializing world...');
             this.world.init();
             console.log('World initialized.');
+
+            // Initialize physics system
+            console.log('Initializing physics...');
+            this.physics = new PhysicsSystem(this.world);
+            console.log('Physics initialized.');
 
             // Create player at spawn
             console.log('Creating player...');
@@ -106,8 +119,9 @@ export class Game {
             this.state = GAME_STATES.PLAYING;
 
             // Show welcome message
-            this.ui.addMessage('Welcome to Wyrmroot Excavation', 'discovery');
-            this.ui.addMessage('Follow the glowing veins deep into the earth...', 'normal');
+            this.ui.addMessage('Welcome to Wyrmroot: Deep Excavation', 'discovery');
+            this.ui.addMessage('Dig deep to find the dragon roots...', 'normal');
+            this.ui.addMessage('Watch your oxygen and heat levels!', 'warning');
 
             console.log('Game initialized successfully!');
         } catch (error) {
@@ -123,6 +137,7 @@ export class Game {
         // Calculate delta time
         this.deltaTime = timestamp - this.lastTime;
         this.lastTime = timestamp;
+        this.currentTime = timestamp;
 
         // Cap delta time to prevent huge jumps
         if (this.deltaTime > 100) this.deltaTime = 100;
@@ -168,19 +183,53 @@ export class Game {
         // Ensure chunks are generated around player
         this.world.ensureChunksAround(this.player.x, this.player.y);
 
-        // Update player
-        this.player.update(deltaTime, this.world);
+        // Update physics (falling tiles, fluids, gases)
+        this.physics.update(deltaTime, this.currentTime);
 
-        // Check for mining completion
+        // Update player
+        const miningResult = this.player.update(deltaTime, this.world);
+
+        // Check for mining completion and physics triggers
         this.checkMiningFeedback();
+
+        // Handle tile mining events for physics
+        if (this.player.isDrilling && this.player.drillProgress >= 1 && this.player.drillTarget) {
+            const target = this.player.drillTarget;
+            const tile = this.world.getTile(target.x, target.y);
+            this.physics.onTileMined(target.x, target.y, tile);
+        }
 
         // Update camera
         this.camera.update(deltaTime);
 
-        // Update UI
+        // Update UI with new stats
         this.ui.updateStats(this.player);
         this.ui.updateToolSelection(this.player.currentTool);
         this.ui.updateSonarCooldown(this.player.sonarCooldown);
+
+        // Update biome-specific UI
+        this.updateBiomeUI();
+    }
+
+    /**
+     * Update biome-specific UI elements
+     */
+    updateBiomeUI() {
+        const biome = this.player.getCurrentBiome();
+
+        // Update background ambient color
+        this.renderer.setAmbientColor(biome.ambientColor);
+
+        // Show warnings for hazardous biomes
+        if (biome.id === 'magma' && this.player.heat > 50 && !this.ui.hasWarning('heat')) {
+            this.ui.addMessage('Warning: Heat levels rising!', 'warning');
+            this.ui.setWarning('heat');
+        }
+
+        if (this.player.oxygen < 30 && !this.ui.hasWarning('oxygen')) {
+            this.ui.addMessage('Warning: Oxygen low!', 'warning');
+            this.ui.setWarning('oxygen');
+        }
     }
 
     /**
@@ -190,20 +239,32 @@ export class Game {
         const drillTarget = this.player.getDrillTarget();
 
         if (drillTarget && drillTarget.progress >= 1) {
-            // Tile was mined - handled in player, just add camera shake
+            // Tile was mined - add camera shake and create particles
             this.camera.shake(2, 100);
+
+            // Trigger physics for surrounding tiles
+            this.physics.registerNeighbors(drillTarget.x, drillTarget.y);
         }
 
         if (this.player.isDrilling && drillTarget) {
             const tile = this.world.getTile(drillTarget.x, drillTarget.y);
 
-            // Check for special discovery
-            if (tile >= 10 && tile <= 22 && !this.lastMinedTile) {
+            // Check for special discovery (roots and fossils)
+            if (tile >= 50 && !this.lastMinedTile) {
                 this.lastMinedTile = tile;
                 const props = this.world.getTileProperties(drillTarget.x, drillTarget.y);
                 if (props && props.drops) {
                     this.ui.showDiscovery(this.ui.formatItemName(props.drops));
                 }
+            }
+
+            // Create drilling particles
+            if (Math.random() < 0.3) {
+                this.renderer.createMiningParticles(
+                    drillTarget.x * TILE_SIZE,
+                    drillTarget.y * TILE_SIZE,
+                    tile
+                );
             }
         } else {
             this.lastMinedTile = null;
@@ -217,9 +278,10 @@ export class Game {
         // Begin rendering with camera
         this.renderer.begin(this.camera);
 
-        // Draw background based on depth
+        // Draw background based on depth and biome
         const depth = this.player ? this.player.getDepth() : 0;
-        this.renderer.drawBackground(this.camera, depth);
+        const biome = this.player ? this.player.getCurrentBiome() : BIOMES.SURFACE;
+        this.renderer.drawBackground(this.camera, depth, biome);
 
         // Draw tiles
         this.renderer.drawTiles(this.world, this.camera);
@@ -250,6 +312,10 @@ export class Game {
                         this.player.drillProgress
                     );
                 }
+            } else if (this.player.currentTool === TOOLS.TURRET) {
+                this.renderer.drawPlacementPreview(targetTileX, targetTileY, 'turret', this.world);
+            } else if (this.player.currentTool === TOOLS.PIPE) {
+                this.renderer.drawPlacementPreview(targetTileX, targetTileY, 'pipe', this.world);
             }
         }
 
@@ -268,14 +334,14 @@ export class Game {
      */
     renderSonarEffect() {
         const pingDuration = 2000;
-        const revealDuration = 5000;
+        const revealDuration = 8000;
         const totalDuration = pingDuration + revealDuration;
 
         const progress = this.player.sonarPingTime / pingDuration;
 
         // Draw expanding ping
         if (this.player.sonarPingTime < pingDuration) {
-            const radius = progress * 800; // Expand to 800 pixels
+            const radius = progress * 800;
             const alpha = 1 - progress;
 
             this.renderer.drawSonarPing(
@@ -308,10 +374,15 @@ export class Game {
             this.ui.updateMinimap(this.renderer, this.world, this.player);
         }
 
-        // Draw FPS (debug)
+        // Draw FPS and depth
         this.ctx.fillStyle = '#666';
         this.ctx.font = '10px monospace';
         this.ctx.fillText(`FPS: ${this.fps}`, 10, this.canvas.height - 10);
+
+        if (this.player) {
+            const biome = this.player.getCurrentBiome();
+            this.ctx.fillText(`Depth: ${this.player.getDepth()}m | ${biome.name}`, 10, this.canvas.height - 22);
+        }
     }
 }
 

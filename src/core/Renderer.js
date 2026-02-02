@@ -1,9 +1,10 @@
 /**
  * Renderer System - Optimized
  * Handles all canvas drawing operations with performance optimizations
+ * Updated for three biomes and new tile types
  */
 
-import { TILE_SIZE, TILE_TYPES, TILE_PROPERTIES } from './Constants.js';
+import { TILE_SIZE, TILE_TYPES, TILE_PROPERTIES, TILE_COLORS, BIOMES } from './Constants.js';
 import { assetManager } from './AssetManager.js';
 
 export class Renderer {
@@ -17,11 +18,26 @@ export class Renderer {
         // Particle systems
         this.particles = [];
 
-        // Cached glow colors (simple RGBA strings instead of gradients)
+        // Cached glow colors for all root types
         this.glowColors = {
-            [TILE_TYPES.CAPILLARY]: 'rgba(0, 170, 119, 0.15)',
-            [TILE_TYPES.DRAGON_ROOT]: 'rgba(0, 255, 170, 0.25)',
-            [TILE_TYPES.ROOT_CORE]: 'rgba(0, 255, 221, 0.35)',
+            // Vitae (green)
+            [TILE_TYPES.VITAE_CAPILLARY]: 'rgba(0, 255, 170, 0.15)',
+            [TILE_TYPES.VITAE_ROOT]: 'rgba(0, 255, 170, 0.25)',
+            [TILE_TYPES.VITAE_CORE]: 'rgba(0, 255, 221, 0.35)',
+            // Ignis (orange/red)
+            [TILE_TYPES.IGNIS_CAPILLARY]: 'rgba(255, 100, 0, 0.15)',
+            [TILE_TYPES.IGNIS_ROOT]: 'rgba(255, 150, 0, 0.25)',
+            [TILE_TYPES.IGNIS_CORE]: 'rgba(255, 200, 50, 0.35)',
+            // Umbra (purple)
+            [TILE_TYPES.UMBRA_CAPILLARY]: 'rgba(100, 0, 150, 0.15)',
+            [TILE_TYPES.UMBRA_ROOT]: 'rgba(150, 0, 200, 0.25)',
+            [TILE_TYPES.UMBRA_CORE]: 'rgba(200, 50, 255, 0.35)',
+            // Other glowing tiles
+            [TILE_TYPES.AMBER]: 'rgba(255, 200, 100, 0.2)',
+            [TILE_TYPES.CRYSTAL]: 'rgba(150, 100, 255, 0.25)',
+            [TILE_TYPES.LAVA]: 'rgba(255, 100, 0, 0.3)',
+            [TILE_TYPES.ACID]: 'rgba(100, 255, 0, 0.2)',
+            [TILE_TYPES.UMBRA_OOZE]: 'rgba(100, 0, 150, 0.25)',
         };
 
         // Pre-render glow sprite
@@ -29,14 +45,22 @@ export class Renderer {
 
         // Minimap throttling
         this.minimapFrameCounter = 0;
-        this.minimapUpdateInterval = 6; // Update every 6 frames
+        this.minimapUpdateInterval = 6;
 
         // Cache for background color
         this.lastDepthRange = -1;
         this.backgroundColors = null;
+        this.ambientColor = '#0a0808';
 
         // Pulse value (updated once per frame, not per tile)
         this.pulseValue = 1;
+    }
+
+    /**
+     * Set ambient color based on biome
+     */
+    setAmbientColor(color) {
+        this.ambientColor = color;
     }
 
     /**
@@ -67,7 +91,7 @@ export class Renderer {
      * Clear the canvas
      */
     clear() {
-        this.ctx.fillStyle = '#0a0808';
+        this.ctx.fillStyle = this.ambientColor;
         this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
     }
 
@@ -97,30 +121,20 @@ export class Renderer {
      * Get depth range for background caching
      */
     getDepthRange(depth) {
-        if (depth < 20) return 0;
-        if (depth < 100) return 1;
-        if (depth < 300) return 2;
-        if (depth < 600) return 3;
-        return 4;
+        if (depth < BIOMES.SURFACE.maxDepth) return 0;
+        if (depth < BIOMES.VERDANT_CRUST.maxDepth) return 1;
+        if (depth < BIOMES.MAGMA_RIBS.maxDepth) return 2;
+        return 3;
     }
 
     /**
-     * Draw background - simplified solid colors instead of gradient
+     * Draw background - biome-based colors
      */
-    drawBackground(camera, depth) {
+    drawBackground(camera, depth, biome) {
         const pos = camera.getRenderPosition();
-        const depthRange = this.getDepthRange(depth);
 
-        // Use cached colors
-        const colors = [
-            '#1a1512', // Surface
-            '#0f0d0a', // Shallow
-            '#080606', // Deep
-            '#040404', // Abyss
-            '#020202', // Core
-        ];
-
-        this.ctx.fillStyle = colors[depthRange];
+        // Use biome ambient color
+        this.ctx.fillStyle = biome ? biome.ambientColor : this.ambientColor;
         this.ctx.fillRect(pos.x, pos.y, this.canvas.width, this.canvas.height);
     }
 
@@ -131,8 +145,7 @@ export class Renderer {
         const range = camera.getVisibleTileRange();
         const ctx = this.ctx;
 
-        // Batch similar tiles together
-        let currentSprite = null;
+        // Collect glow tiles for batch rendering
         let glowTiles = [];
 
         for (let y = range.startY; y <= range.endY; y++) {
@@ -147,6 +160,13 @@ export class Renderer {
                 const sprite = assetManager.getTileSprite(tile);
                 if (sprite) {
                     ctx.drawImage(sprite, screenX, screenY, TILE_SIZE, TILE_SIZE);
+                } else {
+                    // Fallback to color if no sprite
+                    const color = TILE_COLORS[tile];
+                    if (color && color !== 'transparent') {
+                        ctx.fillStyle = color;
+                        ctx.fillRect(screenX, screenY, TILE_SIZE, TILE_SIZE);
+                    }
                 }
 
                 // Collect glow tiles for batch rendering
@@ -177,7 +197,7 @@ export class Renderer {
     }
 
     /**
-     * Draw the player - simplified
+     * Draw the player - with state indicators
      */
     drawPlayer(player) {
         const sprite = assetManager.getSprite('player_idle');
@@ -199,12 +219,25 @@ export class Renderer {
             this.ctx.fillRect(px, py, player.width, player.height);
         }
 
-        // Simplified helmet glow - just a colored circle
+        // Helmet glow - color based on oxygen level
         this.ctx.globalCompositeOperation = 'lighter';
-        this.ctx.fillStyle = 'rgba(0, 255, 170, 0.15)';
+        const oxygenRatio = player.oxygen / player.maxOxygen;
+        const glowR = Math.floor(255 * (1 - oxygenRatio));
+        const glowG = Math.floor(255 * oxygenRatio);
+        this.ctx.fillStyle = `rgba(${glowR}, ${glowG}, 170, 0.15)`;
         this.ctx.beginPath();
         this.ctx.arc(px + player.width / 2, py + 8, 60, 0, Math.PI * 2);
         this.ctx.fill();
+
+        // Heat indicator when overheating
+        if (player.heat > 50) {
+            const heatAlpha = (player.heat / player.maxHeat) * 0.3;
+            this.ctx.fillStyle = `rgba(255, 100, 0, ${heatAlpha})`;
+            this.ctx.beginPath();
+            this.ctx.arc(px + player.width / 2, py + player.height / 2, 40, 0, Math.PI * 2);
+            this.ctx.fill();
+        }
+
         this.ctx.globalCompositeOperation = 'source-over';
     }
 
@@ -231,20 +264,26 @@ export class Renderer {
 
         // Group tiles by type for batched rendering
         const normalTiles = [];
-        const specialTiles = [];
+        const vitaeTiles = [];
+        const ignisTiles = [];
+        const umbraTiles = [];
+        const fossilTiles = [];
 
         for (const tile of revealedTiles) {
-            if (tile.type === TILE_TYPES.DRAGON_ROOT ||
-                tile.type === TILE_TYPES.ROOT_CORE ||
-                tile.type === TILE_TYPES.CAPILLARY ||
-                (tile.type >= TILE_TYPES.FOSSIL_BONE && tile.type <= TILE_TYPES.FOSSIL_TOOTH)) {
-                specialTiles.push(tile);
+            if (tile.type >= TILE_TYPES.VITAE_CAPILLARY && tile.type <= TILE_TYPES.VITAE_CORE) {
+                vitaeTiles.push(tile);
+            } else if (tile.type >= TILE_TYPES.IGNIS_CAPILLARY && tile.type <= TILE_TYPES.IGNIS_CORE) {
+                ignisTiles.push(tile);
+            } else if (tile.type >= TILE_TYPES.UMBRA_CAPILLARY && tile.type <= TILE_TYPES.UMBRA_CORE) {
+                umbraTiles.push(tile);
+            } else if (tile.type >= TILE_TYPES.FOSSIL_BONE && tile.type <= TILE_TYPES.FOSSIL_RIBCAGE) {
+                fossilTiles.push(tile);
             } else {
                 normalTiles.push(tile);
             }
         }
 
-        // Draw normal tiles in one batch
+        // Draw normal tiles
         if (normalTiles.length > 0) {
             ctx.fillStyle = `rgba(68, 170, 255, ${alpha * 0.1})`;
             for (const tile of normalTiles) {
@@ -252,10 +291,34 @@ export class Renderer {
             }
         }
 
-        // Draw special tiles
-        if (specialTiles.length > 0) {
+        // Draw Vitae roots (green)
+        if (vitaeTiles.length > 0) {
             ctx.fillStyle = `rgba(0, 255, 170, ${alpha * 0.3})`;
-            for (const tile of specialTiles) {
+            for (const tile of vitaeTiles) {
+                ctx.fillRect(tile.x * TILE_SIZE, tile.y * TILE_SIZE, TILE_SIZE, TILE_SIZE);
+            }
+        }
+
+        // Draw Ignis roots (orange)
+        if (ignisTiles.length > 0) {
+            ctx.fillStyle = `rgba(255, 150, 0, ${alpha * 0.3})`;
+            for (const tile of ignisTiles) {
+                ctx.fillRect(tile.x * TILE_SIZE, tile.y * TILE_SIZE, TILE_SIZE, TILE_SIZE);
+            }
+        }
+
+        // Draw Umbra roots (purple)
+        if (umbraTiles.length > 0) {
+            ctx.fillStyle = `rgba(150, 0, 200, ${alpha * 0.3})`;
+            for (const tile of umbraTiles) {
+                ctx.fillRect(tile.x * TILE_SIZE, tile.y * TILE_SIZE, TILE_SIZE, TILE_SIZE);
+            }
+        }
+
+        // Draw fossils (white)
+        if (fossilTiles.length > 0) {
+            ctx.fillStyle = `rgba(255, 255, 200, ${alpha * 0.25})`;
+            for (const tile of fossilTiles) {
                 ctx.fillRect(tile.x * TILE_SIZE, tile.y * TILE_SIZE, TILE_SIZE, TILE_SIZE);
             }
         }
@@ -289,10 +352,35 @@ export class Renderer {
     }
 
     /**
+     * Draw placement preview for structures
+     */
+    drawPlacementPreview(tileX, tileY, type, world) {
+        const screenX = tileX * TILE_SIZE;
+        const screenY = tileY * TILE_SIZE;
+        const currentTile = world.getTile(tileX, tileY);
+
+        let canPlace = currentTile === TILE_TYPES.AIR;
+
+        // Turrets need floor
+        if (type === 'turret') {
+            canPlace = canPlace && world.isSolid(tileX, tileY + 1);
+        }
+
+        this.ctx.globalAlpha = 0.5;
+        this.ctx.fillStyle = canPlace ? '#88ff88' : '#ff4444';
+        this.ctx.fillRect(screenX, screenY, TILE_SIZE, TILE_SIZE);
+        this.ctx.globalAlpha = 1;
+
+        this.ctx.strokeStyle = canPlace ? 'rgba(136, 255, 136, 0.8)' : 'rgba(255, 68, 68, 0.8)';
+        this.ctx.lineWidth = 2;
+        this.ctx.strokeRect(screenX + 1, screenY + 1, TILE_SIZE - 2, TILE_SIZE - 2);
+    }
+
+    /**
      * Add a particle
      */
     addParticle(x, y, vx, vy, color, size, life) {
-        if (this.particles.length > 100) return; // Limit particles
+        if (this.particles.length > 100) return;
         this.particles.push({
             x, y, vx, vy, color, size, life,
             maxLife: life,
@@ -301,16 +389,10 @@ export class Renderer {
     }
 
     /**
-     * Create mining particles
+     * Create mining particles - biome-aware
      */
     createMiningParticles(x, y, tileType) {
-        const colors = {
-            [TILE_TYPES.DIRT]: '#6a5738',
-            [TILE_TYPES.STONE]: '#7a7a7a',
-            [TILE_TYPES.CAPILLARY]: '#00ffaa',
-            [TILE_TYPES.DRAGON_ROOT]: '#00ffdd',
-        };
-        const color = colors[tileType] || '#888888';
+        const color = TILE_COLORS[tileType] || '#888888';
 
         for (let i = 0; i < 6; i++) {
             const angle = Math.random() * Math.PI * 2;
@@ -361,13 +443,12 @@ export class Renderer {
     drawMinimap(ctx, world, player, width, height) {
         this.minimapFrameCounter++;
 
-        // Only update every N frames
         if (this.minimapFrameCounter < this.minimapUpdateInterval) {
             return;
         }
         this.minimapFrameCounter = 0;
 
-        const scale = 1; // Larger pixels = faster
+        const scale = 1;
         const playerTileX = Math.floor(player.x / TILE_SIZE);
         const playerTileY = Math.floor(player.y / TILE_SIZE);
 
@@ -386,12 +467,38 @@ export class Renderer {
         const data = imageData.data;
 
         const colors = {
+            // Layer 1
             [TILE_TYPES.DIRT]: [58, 39, 24],
             [TILE_TYPES.STONE]: [74, 74, 74],
-            [TILE_TYPES.HARD_STONE]: [50, 50, 50],
-            [TILE_TYPES.CAPILLARY]: [0, 170, 119],
-            [TILE_TYPES.DRAGON_ROOT]: [0, 255, 170],
-            [TILE_TYPES.ROOT_CORE]: [0, 255, 221],
+            [TILE_TYPES.PETRIFIED_WOOD]: [90, 64, 48],
+            [TILE_TYPES.AMBER]: [212, 160, 32],
+            [TILE_TYPES.GRAVEL]: [106, 106, 90],
+            // Layer 2
+            [TILE_TYPES.VOLCANIC_ROCK]: [58, 32, 32],
+            [TILE_TYPES.BASALT]: [42, 42, 42],
+            [TILE_TYPES.OBSIDIAN]: [26, 26, 42],
+            [TILE_TYPES.ASH]: [90, 80, 80],
+            // Layer 3
+            [TILE_TYPES.VOID_STONE]: [26, 10, 42],
+            [TILE_TYPES.CRYSTAL]: [128, 96, 192],
+            [TILE_TYPES.FLOATING_ROCK]: [74, 58, 90],
+            [TILE_TYPES.SHADOW_GLASS]: [42, 32, 64],
+            // Roots
+            [TILE_TYPES.VITAE_CAPILLARY]: [0, 170, 119],
+            [TILE_TYPES.VITAE_ROOT]: [0, 255, 170],
+            [TILE_TYPES.VITAE_CORE]: [0, 255, 221],
+            [TILE_TYPES.IGNIS_CAPILLARY]: [204, 102, 0],
+            [TILE_TYPES.IGNIS_ROOT]: [255, 153, 0],
+            [TILE_TYPES.IGNIS_CORE]: [255, 204, 0],
+            [TILE_TYPES.UMBRA_CAPILLARY]: [102, 0, 170],
+            [TILE_TYPES.UMBRA_ROOT]: [153, 0, 255],
+            [TILE_TYPES.UMBRA_CORE]: [204, 102, 255],
+            // Fluids
+            [TILE_TYPES.WATER]: [42, 80, 128],
+            [TILE_TYPES.LAVA]: [255, 68, 0],
+            [TILE_TYPES.ACID]: [64, 255, 64],
+            [TILE_TYPES.UMBRA_OOZE]: [96, 32, 160],
+            // Bedrock
             [TILE_TYPES.BEDROCK]: [30, 30, 30],
         };
         const defaultColor = [51, 51, 51];
