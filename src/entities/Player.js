@@ -506,8 +506,8 @@ export class Player {
         let effectivePower = this.drillPower;
         const excavatorTool = this.livingTools.excavator;
         if (excavatorTool) {
-            const toolData = LIVING_TOOLS[excavatorTool.toUpperCase()];
-            if (toolData) effectivePower = toolData.power;
+            // excavatorTool is the full tool object with power property
+            effectivePower = excavatorTool.power || effectivePower;
         }
 
         // Drilling
