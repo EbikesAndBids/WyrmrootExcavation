@@ -25,36 +25,57 @@ export class CraftingSystem {
 
     /**
      * Initialize crafting recipes
+     * Format: 'chassis_id+strain' => 'tool_id'
      */
     initializeRecipes() {
         return {
-            // Excavators
+            // === EXCAVATORS ===
+            // Tier 1: basic_drill (power 4)
             'basic_drill+vitae': 'vorpal_claw',
             'basic_drill+ignis': 'magma_worm',
             'basic_drill+umbra': 'void_borer',
+            // Tier 2: titanium_drill (power 5)
             'titanium_drill+vitae': 'spore_drill',
             'titanium_drill+ignis': 'inferno_jet',
             'titanium_drill+umbra': 'singularity_pick',
+            // Tier 3: void_drill (power 7)
+            'void_drill+vitae': 'root_singer',
+            'void_drill+ignis': 'core_burner',
+            'void_drill+umbra': 'null_breaker',
 
-            // Suits
+            // === SUITS ===
+            // Tier 1
             'basic_suit+vitae': 'photosynthesis_plating',
+            'basic_suit+ignis': 'heat_shell',
+            'basic_suit+umbra': 'shadow_cloak',
+            // Tier 2
+            'thermal_suit+vitae': 'regen_suit',
             'thermal_suit+ignis': 'thermal_vent_rig',
+            'thermal_suit+umbra': 'void_suit',
+            // Tier 3
+            'phase_suit+vitae': 'living_armor',
+            'phase_suit+ignis': 'magma_skin',
             'phase_suit+umbra': 'phase_shift_armor',
 
-            // Backpacks
+            // === BACKPACKS ===
+            // Tier 1
             'basic_pack+vitae': 'gulper_sack',
-            'refinery_pack+ignis': 'mobile_refinery',
+            'basic_pack+ignis': 'heat_pack',
             'basic_pack+umbra': 'turret_mount',
+            // Tier 2
+            'refinery_pack+vitae': 'garden_pack',
+            'refinery_pack+ignis': 'mobile_refinery',
+            'refinery_pack+umbra': 'void_pack',
 
-            // Utilities
+            // === UTILITIES ===
+            // Tier 1
             'grapple_frame+vitae': 'vine_grapple',
-            'scanner_frame+ignis': 'ore_scanner',
+            'grapple_frame+ignis': 'flame_jets',
             'grapple_frame+umbra': 'stasis_field',
-
-            // Symbiotes (require specific catalyst)
-            'catalyst+vitae': 'loot_beetle',
-            'catalyst+ignis': 'flame_wisp',
-            'catalyst+umbra': 'shadow_orb',
+            // Tier 2
+            'scanner_frame+vitae': 'root_sense',
+            'scanner_frame+ignis': 'ore_scanner',
+            'scanner_frame+umbra': 'void_sight',
         };
     }
 
@@ -112,21 +133,33 @@ export class CraftingSystem {
 
     /**
      * Get strain cost based on type and tier
+     * Tier 1: uses small/trace sap (from capillaries, easier to get)
+     * Tier 2: uses regular sap (from roots)
+     * Tier 3: uses pure sap (from cores)
      */
     getStrainCost(strainType, tier) {
-        const amounts = { 1: 5, 2: 10, 3: 20 };
-        const amount = amounts[tier] || 5;
+        // Tier 1 uses small amounts of easier materials
+        // Tier 2 uses regular sap
+        // Tier 3 uses pure/concentrated sap
+        const tierMaterials = {
+            vitae: {
+                1: { vitae_sap_small: 8 },   // From capillaries (hardness 2)
+                2: { vitae_sap: 10 },         // From roots (hardness 3)
+                3: { vitae_sap_pure: 5 },     // From cores (hardness 5)
+            },
+            ignis: {
+                1: { ignis_plasma_small: 8 }, // From capillaries (hardness 3)
+                2: { ignis_plasma: 10 },      // From roots (hardness 4)
+                3: { ignis_plasma_pure: 5 },  // From cores (hardness 6)
+            },
+            umbra: {
+                1: { umbra_ichor_small: 8 },  // From capillaries (hardness 4)
+                2: { umbra_ichor: 10 },       // From roots (hardness 5)
+                3: { umbra_ichor_pure: 5 },   // From cores (hardness 7)
+            },
+        };
 
-        switch (strainType) {
-            case 'vitae':
-                return { vitae_sap: amount };
-            case 'ignis':
-                return { ignis_plasma: amount };
-            case 'umbra':
-                return { umbra_ichor: amount };
-            default:
-                return {};
-        }
+        return tierMaterials[strainType]?.[tier] || {};
     }
 
     /**

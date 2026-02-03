@@ -351,17 +351,30 @@ export class UIManager {
 
     /**
      * Get strain cost text for display
+     * Tier 1: small/trace sap (from capillaries)
+     * Tier 2: regular sap (from roots)
+     * Tier 3: pure sap (from cores)
      */
     getStrainCostText(strainType, tier) {
-        const amounts = { 1: 5, 2: 10, 3: 20 };
-        const amount = amounts[tier] || 5;
+        const costs = {
+            vitae: {
+                1: '8 vitae sap (trace)',
+                2: '10 vitae sap',
+                3: '5 pure vitae sap',
+            },
+            ignis: {
+                1: '8 ignis plasma (trace)',
+                2: '10 ignis plasma',
+                3: '5 pure ignis plasma',
+            },
+            umbra: {
+                1: '8 umbra ichor (trace)',
+                2: '10 umbra ichor',
+                3: '5 pure umbra ichor',
+            },
+        };
 
-        switch (strainType) {
-            case 'vitae': return `${amount} vitae sap`;
-            case 'ignis': return `${amount} ignis plasma`;
-            case 'umbra': return `${amount} umbra ichor`;
-            default: return '';
-        }
+        return costs[strainType]?.[tier] || '';
     }
 
     /**
