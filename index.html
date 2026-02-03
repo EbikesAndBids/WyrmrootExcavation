@@ -194,40 +194,57 @@
                 <div class="forge-description">
                     Combine Chassis + Strain + Catalyst to create living equipment.
                 </div>
+
                 <div class="forge-inputs">
-                    <div class="forge-slot" id="chassis-slot">
+                    <!-- Chassis Selection -->
+                    <div class="forge-slot">
                         <div class="slot-label">Chassis</div>
-                        <select id="chassis-select">
-                            <option value="">Select Chassis...</option>
-                        </select>
+                        <div class="custom-dropdown" id="chassis-dropdown">
+                            <div class="dropdown-selected" id="chassis-selected">Select Chassis...</div>
+                            <div class="dropdown-options" id="chassis-options"></div>
+                        </div>
                     </div>
+
                     <div class="forge-plus">+</div>
-                    <div class="forge-slot" id="strain-slot">
+
+                    <!-- Strain Selection -->
+                    <div class="forge-slot">
                         <div class="slot-label">Strain</div>
-                        <select id="strain-select">
-                            <option value="">Select Strain...</option>
-                            <option value="vitae" class="vitae">Vitae (Forest)</option>
-                            <option value="ignis" class="ignis">Ignis (Fire)</option>
-                            <option value="umbra" class="umbra">Umbra (Void)</option>
-                        </select>
+                        <div class="custom-dropdown" id="strain-dropdown">
+                            <div class="dropdown-selected" id="strain-selected">Select Strain...</div>
+                            <div class="dropdown-options" id="strain-options">
+                                <div class="dropdown-option vitae" data-value="vitae">Vitae (Forest)</div>
+                                <div class="dropdown-option ignis" data-value="ignis">Ignis (Fire)</div>
+                                <div class="dropdown-option umbra" data-value="umbra">Umbra (Void)</div>
+                            </div>
+                        </div>
                     </div>
+
                     <div class="forge-plus">+</div>
-                    <div class="forge-slot" id="catalyst-slot">
+
+                    <!-- Catalyst Selection -->
+                    <div class="forge-slot">
                         <div class="slot-label">Catalyst (optional)</div>
-                        <select id="catalyst-select">
-                            <option value="">No Catalyst</option>
-                            <option value="common">Common</option>
-                            <option value="uncommon">Uncommon</option>
-                            <option value="rare">Rare</option>
-                            <option value="legendary">Legendary</option>
-                        </select>
+                        <div class="custom-dropdown" id="catalyst-dropdown">
+                            <div class="dropdown-selected" id="catalyst-selected">No Catalyst</div>
+                            <div class="dropdown-options" id="catalyst-options">
+                                <div class="dropdown-option" data-value="">No Catalyst</div>
+                                <div class="dropdown-option" data-value="common">Common (+0%)</div>
+                                <div class="dropdown-option" data-value="uncommon">Uncommon (+50%)</div>
+                                <div class="dropdown-option" data-value="rare">Rare (+100%)</div>
+                                <div class="dropdown-option" data-value="legendary">Legendary (+200%)</div>
+                            </div>
+                        </div>
                     </div>
                 </div>
+
                 <div id="forge-preview">
                     <div class="preview-label">Result Preview:</div>
                     <div id="forge-result">Select chassis and strain</div>
                 </div>
+
                 <div id="forge-cost"></div>
+
                 <button id="forge-button" class="forge-btn" disabled>CRAFT</button>
             </div>
         </div>

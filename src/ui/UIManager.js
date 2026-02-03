@@ -52,12 +52,25 @@ export class UIManager {
             biomassValue: document.getElementById('biomass-value'),
             // Bio-Forge
             bioforgePanel: document.getElementById('bioforge-panel'),
-            chassisSelect: document.getElementById('chassis-select'),
-            strainSelect: document.getElementById('strain-select'),
-            catalystSelect: document.getElementById('catalyst-select'),
+            chassisDropdown: document.getElementById('chassis-dropdown'),
+            chassisSelected: document.getElementById('chassis-selected'),
+            chassisOptions: document.getElementById('chassis-options'),
+            strainDropdown: document.getElementById('strain-dropdown'),
+            strainSelected: document.getElementById('strain-selected'),
+            strainOptions: document.getElementById('strain-options'),
+            catalystDropdown: document.getElementById('catalyst-dropdown'),
+            catalystSelected: document.getElementById('catalyst-selected'),
+            catalystOptions: document.getElementById('catalyst-options'),
             forgeResult: document.getElementById('forge-result'),
             forgeCost: document.getElementById('forge-cost'),
             forgeButton: document.getElementById('forge-button'),
+        };
+
+        // Bio-Forge state
+        this.forgeState = {
+            chassis: null,
+            strain: null,
+            catalyst: null,
         };
 
         // State
@@ -137,55 +150,119 @@ export class UIManager {
     onCraft(chassisId, strainType, catalystRarity) {}
 
     /**
-     * Setup Bio-Forge UI
+     * Setup Bio-Forge UI with custom dropdowns
      */
     setupBioForge() {
-        // Populate chassis select
-        if (this.elements.chassisSelect) {
+        // Populate chassis options
+        if (this.elements.chassisOptions) {
+            this.elements.chassisOptions.innerHTML = '';
             for (const [key, chassis] of Object.entries(CHASSIS_TYPES)) {
-                const option = document.createElement('option');
-                option.value = chassis.id;
+                const option = document.createElement('div');
+                option.className = 'dropdown-option';
+                option.dataset.value = chassis.id;
                 option.textContent = `${chassis.name} (Tier ${chassis.tier})`;
-                this.elements.chassisSelect.appendChild(option);
+                this.elements.chassisOptions.appendChild(option);
             }
-
-            this.elements.chassisSelect.addEventListener('change', () => this.updateForgePreview());
         }
 
-        if (this.elements.strainSelect) {
-            this.elements.strainSelect.addEventListener('change', () => this.updateForgePreview());
-        }
+        // Setup dropdown click handlers
+        this.setupCustomDropdown('chassis');
+        this.setupCustomDropdown('strain');
+        this.setupCustomDropdown('catalyst');
 
-        if (this.elements.catalystSelect) {
-            this.elements.catalystSelect.addEventListener('change', () => this.updateForgePreview());
-        }
+        // Close dropdowns when clicking outside
+        document.addEventListener('click', (e) => {
+            if (!e.target.closest('.custom-dropdown')) {
+                this.closeAllDropdowns();
+            }
+        });
 
+        // Forge button
         if (this.elements.forgeButton) {
             this.elements.forgeButton.addEventListener('click', () => {
-                const chassis = this.elements.chassisSelect?.value;
-                const strain = this.elements.strainSelect?.value;
-                const catalyst = this.elements.catalystSelect?.value || null;
-
-                if (chassis && strain) {
-                    this.onCraft(chassis, strain, catalyst);
+                if (this.forgeState.chassis && this.forgeState.strain) {
+                    this.onCraft(this.forgeState.chassis, this.forgeState.strain, this.forgeState.catalyst);
                 }
             });
         }
     }
 
     /**
-     * Update forge preview
+     * Setup a custom dropdown with click handlers
+     */
+    setupCustomDropdown(name) {
+        const dropdown = this.elements[`${name}Dropdown`];
+        const selected = this.elements[`${name}Selected`];
+        const options = this.elements[`${name}Options`];
+
+        if (!dropdown || !selected || !options) {
+            console.warn(`Bio-Forge: Missing elements for ${name} dropdown`);
+            return;
+        }
+
+        // Toggle dropdown on click
+        selected.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const isOpen = dropdown.classList.contains('open');
+            this.closeAllDropdowns();
+            if (!isOpen) {
+                dropdown.classList.add('open');
+            }
+        });
+
+        // Handle option selection
+        options.addEventListener('click', (e) => {
+            const option = e.target.closest('.dropdown-option');
+            if (!option) return;
+
+            e.stopPropagation();
+
+            const value = option.dataset.value;
+            const text = option.textContent;
+
+            // Update selected display
+            selected.textContent = text;
+
+            // Mark as selected
+            options.querySelectorAll('.dropdown-option').forEach(opt => opt.classList.remove('selected'));
+            option.classList.add('selected');
+
+            // Update forge state
+            this.forgeState[name] = value || null;
+
+            // Close dropdown
+            dropdown.classList.remove('open');
+
+            // Update preview
+            this.updateForgePreview();
+        });
+    }
+
+    /**
+     * Close all custom dropdowns
+     */
+    closeAllDropdowns() {
+        document.querySelectorAll('.custom-dropdown.open').forEach(dd => {
+            dd.classList.remove('open');
+        });
+    }
+
+    /**
+     * Update forge preview based on current selections
      */
     updateForgePreview() {
-        const chassisId = this.elements.chassisSelect?.value;
-        const strainType = this.elements.strainSelect?.value;
+        const chassisId = this.forgeState.chassis;
+        const strainType = this.forgeState.strain;
 
         if (!chassisId || !strainType) {
             if (this.elements.forgeResult) {
-                this.elements.forgeResult.textContent = 'Select chassis and strain';
+                this.elements.forgeResult.innerHTML = '<span style="color: #666;">Select chassis and strain to see result</span>';
             }
             if (this.elements.forgeButton) {
                 this.elements.forgeButton.disabled = true;
+            }
+            if (this.elements.forgeCost) {
+                this.elements.forgeCost.innerHTML = '';
             }
             return;
         }
@@ -199,15 +276,30 @@ export class UIManager {
             'titanium_drill+vitae': 'spore_drill',
             'titanium_drill+ignis': 'inferno_jet',
             'titanium_drill+umbra': 'singularity_pick',
+            'void_drill+vitae': 'root_singer',
+            'void_drill+ignis': 'core_burner',
+            'void_drill+umbra': 'null_breaker',
             'basic_suit+vitae': 'photosynthesis_plating',
+            'basic_suit+ignis': 'heat_shell',
+            'basic_suit+umbra': 'shadow_cloak',
+            'thermal_suit+vitae': 'regen_suit',
             'thermal_suit+ignis': 'thermal_vent_rig',
+            'thermal_suit+umbra': 'void_suit',
+            'phase_suit+vitae': 'living_armor',
+            'phase_suit+ignis': 'magma_skin',
             'phase_suit+umbra': 'phase_shift_armor',
             'basic_pack+vitae': 'gulper_sack',
-            'refinery_pack+ignis': 'mobile_refinery',
+            'basic_pack+ignis': 'heat_pack',
             'basic_pack+umbra': 'turret_mount',
+            'refinery_pack+vitae': 'garden_pack',
+            'refinery_pack+ignis': 'mobile_refinery',
+            'refinery_pack+umbra': 'void_pack',
             'grapple_frame+vitae': 'vine_grapple',
-            'scanner_frame+ignis': 'ore_scanner',
+            'grapple_frame+ignis': 'flame_jets',
             'grapple_frame+umbra': 'stasis_field',
+            'scanner_frame+vitae': 'root_sense',
+            'scanner_frame+ignis': 'ore_scanner',
+            'scanner_frame+umbra': 'void_sight',
         };
 
         const resultId = recipes[recipeKey];
@@ -215,23 +307,60 @@ export class UIManager {
         if (resultId) {
             const tool = LIVING_TOOLS[resultId.toUpperCase()];
             if (tool && this.elements.forgeResult) {
+                const catalystBonus = this.forgeState.catalyst ?
+                    { common: '+0%', uncommon: '+50%', rare: '+100%', legendary: '+200%' }[this.forgeState.catalyst] : '';
+
                 this.elements.forgeResult.innerHTML = `
                     <div class="preview-tool ${strainType}">
-                        <strong>${tool.name}</strong><br>
-                        <span>${tool.description}</span>
+                        <div style="font-size: 14px; font-weight: bold; margin-bottom: 4px;">${tool.name}</div>
+                        <div style="font-size: 11px; color: #888;">${tool.category} - Tier ${tool.tier}</div>
+                        <div style="font-size: 11px; margin-top: 8px;">${tool.description}</div>
+                        ${catalystBonus ? `<div style="font-size: 10px; color: #ffcc00; margin-top: 4px;">Catalyst: ${catalystBonus} power</div>` : ''}
                     </div>
                 `;
             }
+
+            // Show cost
+            if (this.elements.forgeCost) {
+                const chassis = CHASSIS_TYPES[chassisId.toUpperCase()];
+                const strainCost = this.getStrainCostText(strainType, chassis?.tier || 1);
+                const chassisCost = chassis ? Object.entries(chassis.cost).map(([k, v]) => `${v} ${k.replace(/_/g, ' ')}`).join(', ') : '';
+
+                this.elements.forgeCost.innerHTML = `
+                    <div style="font-size: 11px; color: #888; text-align: center;">
+                        <strong>Cost:</strong> ${chassisCost} + ${strainCost}
+                    </div>
+                `;
+            }
+
             if (this.elements.forgeButton) {
                 this.elements.forgeButton.disabled = false;
             }
         } else {
             if (this.elements.forgeResult) {
-                this.elements.forgeResult.textContent = 'Invalid combination';
+                this.elements.forgeResult.innerHTML = '<span style="color: #ff6666;">Invalid combination - no recipe exists</span>';
             }
             if (this.elements.forgeButton) {
                 this.elements.forgeButton.disabled = true;
             }
+            if (this.elements.forgeCost) {
+                this.elements.forgeCost.innerHTML = '';
+            }
+        }
+    }
+
+    /**
+     * Get strain cost text for display
+     */
+    getStrainCostText(strainType, tier) {
+        const amounts = { 1: 5, 2: 10, 3: 20 };
+        const amount = amounts[tier] || 5;
+
+        switch (strainType) {
+            case 'vitae': return `${amount} vitae sap`;
+            case 'ignis': return `${amount} ignis plasma`;
+            case 'umbra': return `${amount} umbra ichor`;
+            default: return '';
         }
     }
 
@@ -740,6 +869,39 @@ export class UIManager {
         this.currentPlayer = player;
         this.bioforgeOpen = true;
         this.elements.bioforgePanel.classList.remove('hidden');
+
+        // Reset the forge state and UI
+        this.resetBioForge();
+    }
+
+    /**
+     * Reset Bio-Forge to initial state
+     */
+    resetBioForge() {
+        this.forgeState = {
+            chassis: null,
+            strain: null,
+            catalyst: null,
+        };
+
+        // Reset dropdown displays
+        if (this.elements.chassisSelected) {
+            this.elements.chassisSelected.textContent = 'Select Chassis...';
+        }
+        if (this.elements.strainSelected) {
+            this.elements.strainSelected.textContent = 'Select Strain...';
+        }
+        if (this.elements.catalystSelected) {
+            this.elements.catalystSelected.textContent = 'No Catalyst';
+        }
+
+        // Clear selected states
+        document.querySelectorAll('.dropdown-option.selected').forEach(opt => {
+            opt.classList.remove('selected');
+        });
+
+        // Update preview
+        this.updateForgePreview();
     }
 
     /**
