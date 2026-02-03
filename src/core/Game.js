@@ -366,8 +366,8 @@ export class Game {
         // Draw tiles
         this.renderer.drawTiles(this.world, this.camera);
 
-        // Draw darkness overlay
-        this.renderer.drawDarknessOverlay(this.camera);
+        // Draw darkness overlay (with world for surface check)
+        this.renderer.drawDarknessOverlay(this.camera, this.world);
 
         // Draw sonar effects
         if (this.player && this.player.sonarActive) {

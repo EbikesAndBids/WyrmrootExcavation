@@ -15,12 +15,21 @@ export const WORLD_WIDTH_CHUNKS = 8;
 export const WORLD_HEIGHT_CHUNKS = 48; // Deeper world for 3 biomes
 export const WORLD_WIDTH = WORLD_WIDTH_CHUNKS * CHUNK_SIZE;
 export const WORLD_HEIGHT = WORLD_HEIGHT_CHUNKS * CHUNK_SIZE;
-export const SURFACE_LEVEL = 6;
+export const SURFACE_LEVEL = 20; // More sky space above ground
+export const MINE_ENTRANCE_DEPTH = 30; // How deep the pre-dug mine shaft goes
 
 // Tile types - organized by category
 export const TILE_TYPES = {
     // Basic
     AIR: 0,
+    SKY: 101, // Blue sky background
+
+    // Surface tiles
+    GRASS: 102,
+    SURFACE_DIRT: 103,
+    MINE_SUPPORT: 104, // Wooden beams
+    MINE_LADDER: 105,
+    SURFACE_STONE: 106,
 
     // Terrain - Layer 1: Verdant Crust
     DIRT: 1,
@@ -88,6 +97,14 @@ export const TILE_TYPES = {
 // Tile properties
 export const TILE_PROPERTIES = {
     [TILE_TYPES.AIR]: { solid: false, hardness: 0, drops: null },
+    [TILE_TYPES.SKY]: { solid: false, hardness: 0, drops: null, sky: true },
+
+    // Surface tiles
+    [TILE_TYPES.GRASS]: { solid: true, hardness: 1, drops: 'dirt', surface: true },
+    [TILE_TYPES.SURFACE_DIRT]: { solid: true, hardness: 1, drops: 'dirt', surface: true },
+    [TILE_TYPES.SURFACE_STONE]: { solid: true, hardness: 2, drops: 'stone', surface: true },
+    [TILE_TYPES.MINE_SUPPORT]: { solid: true, hardness: 1, drops: null, climbable: true },
+    [TILE_TYPES.MINE_LADDER]: { solid: false, hardness: 1, drops: null, climbable: true },
 
     // Layer 1 terrain
     [TILE_TYPES.DIRT]: { solid: true, hardness: 1, drops: 'dirt', layer: 1 },
@@ -916,6 +933,14 @@ export const CONTRACT_TYPES = {
 // Tile colors for rendering
 export const TILE_COLORS = {
     [TILE_TYPES.AIR]: 'transparent',
+    [TILE_TYPES.SKY]: '#4a90c8',
+
+    // Surface tiles
+    [TILE_TYPES.GRASS]: '#2d8a2d',
+    [TILE_TYPES.SURFACE_DIRT]: '#5a4530',
+    [TILE_TYPES.SURFACE_STONE]: '#6a6a6a',
+    [TILE_TYPES.MINE_SUPPORT]: '#6b4423',
+    [TILE_TYPES.MINE_LADDER]: '#7a5533',
 
     // Layer 1: Verdant Crust
     [TILE_TYPES.DIRT]: '#3a2718',

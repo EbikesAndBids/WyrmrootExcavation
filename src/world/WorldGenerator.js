@@ -3,7 +3,7 @@
  * Procedural generation for three dragon biomes
  */
 
-import { CHUNK_SIZE, TILE_TYPES, WORLD_WIDTH, WORLD_HEIGHT, SURFACE_LEVEL, BIOMES } from '../core/Constants.js';
+import { CHUNK_SIZE, TILE_TYPES, WORLD_WIDTH, WORLD_HEIGHT, SURFACE_LEVEL, MINE_ENTRANCE_DEPTH, BIOMES } from '../core/Constants.js';
 
 export class WorldGenerator {
     constructor(world) {
@@ -125,10 +125,66 @@ export class WorldGenerator {
     }
 
     generateBaseTile(x, y) {
-        if (y < SURFACE_LEVEL) return TILE_TYPES.AIR;
-        const surfaceNoise = this.fractalNoise(x, 0, 2, 16) * 4;
-        if (y < SURFACE_LEVEL + surfaceNoise) return TILE_TYPES.AIR;
+        const worldCenterX = Math.floor(WORLD_WIDTH / 2);
+        const mineWidth = 4; // Width of mine shaft opening
+        const mineLeft = worldCenterX - Math.floor(mineWidth / 2);
+        const mineRight = worldCenterX + Math.floor(mineWidth / 2);
 
+        // Sky area (above surface)
+        if (y < SURFACE_LEVEL - 2) {
+            return TILE_TYPES.SKY;
+        }
+
+        // Surface terrain height variation
+        const surfaceNoise = this.fractalNoise(x, 0, 2, 16) * 3;
+        const surfaceY = SURFACE_LEVEL + Math.floor(surfaceNoise);
+
+        // Check if we're in the mine entrance area
+        const inMineX = x >= mineLeft && x <= mineRight;
+        const inMineShaft = inMineX && y >= SURFACE_LEVEL - 2 && y < SURFACE_LEVEL + MINE_ENTRANCE_DEPTH;
+
+        // Mine shaft opening - carved out area
+        if (inMineShaft) {
+            // Mine shaft walls (support beams on the sides)
+            if (x === mineLeft || x === mineRight) {
+                // Vertical support beams every few tiles
+                if (y % 4 === 0) {
+                    return TILE_TYPES.MINE_SUPPORT;
+                }
+                return TILE_TYPES.AIR;
+            }
+            // Ladder in the center
+            if (x === worldCenterX) {
+                return TILE_TYPES.MINE_LADDER;
+            }
+            // Open mine shaft
+            return TILE_TYPES.AIR;
+        }
+
+        // Sky above surface
+        if (y < surfaceY) {
+            return TILE_TYPES.SKY;
+        }
+
+        // Surface grass layer (only where not mine)
+        if (y === surfaceY && !inMineX) {
+            return TILE_TYPES.GRASS;
+        }
+
+        // Surface dirt layer (few tiles below grass)
+        if (y < surfaceY + 3 && !inMineX) {
+            return TILE_TYPES.SURFACE_DIRT;
+        }
+
+        // Mine entrance structure (building above ground)
+        if (y === SURFACE_LEVEL - 2 && (x === mineLeft - 1 || x === mineRight + 1)) {
+            return TILE_TYPES.MINE_SUPPORT; // Side posts
+        }
+        if (y === SURFACE_LEVEL - 3 && x >= mineLeft - 1 && x <= mineRight + 1) {
+            return TILE_TYPES.MINE_SUPPORT; // Roof beam
+        }
+
+        // Underground
         const depth = y - SURFACE_LEVEL;
         const biome = this.getBiome(depth);
         const caveScale = biome.id === 'abyss' ? 20 : biome.id === 'magma' ? 28 : 24;

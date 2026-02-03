@@ -160,14 +160,26 @@ export class Renderer {
     }
 
     /**
-     * Draw background - biome-based colors
+     * Draw background - biome-based colors with sky gradient
      */
     drawBackground(camera, depth, biome) {
         const pos = camera.getRenderPosition();
+        const ctx = this.ctx;
 
-        // Use biome ambient color
-        this.ctx.fillStyle = biome ? biome.ambientColor : this.ambientColor;
-        this.ctx.fillRect(pos.x, pos.y, this.canvas.width, this.canvas.height);
+        // If near surface, draw sky gradient
+        if (depth < 30) {
+            const gradient = ctx.createLinearGradient(pos.x, pos.y, pos.x, pos.y + this.canvas.height);
+            gradient.addColorStop(0, '#87CEEB'); // Light sky blue
+            gradient.addColorStop(0.3, '#4a90c8'); // Medium blue
+            gradient.addColorStop(0.6, '#2d5a87'); // Darker blue
+            gradient.addColorStop(1, biome ? biome.ambientColor : this.ambientColor);
+            ctx.fillStyle = gradient;
+        } else {
+            // Use biome ambient color underground
+            ctx.fillStyle = biome ? biome.ambientColor : this.ambientColor;
+        }
+
+        ctx.fillRect(pos.x, pos.y, this.canvas.width, this.canvas.height);
     }
 
     /**
@@ -251,15 +263,21 @@ export class Renderer {
     /**
      * Draw darkness overlay after tiles
      */
-    drawDarknessOverlay(camera) {
+    drawDarknessOverlay(camera, world) {
         if (!this.lightMap) return;
 
         const range = camera.getVisibleTileRange();
         const ctx = this.ctx;
 
+        // Import SURFACE_LEVEL for surface check
+        const SURFACE_LEVEL = 20; // Must match Constants.js
+
         // Draw darkness per tile
         for (let y = range.startY; y <= range.endY; y++) {
             for (let x = range.startX; x <= range.endX; x++) {
+                // No darkness above surface (sky is always lit)
+                if (y < SURFACE_LEVEL + 5) continue;
+
                 const light = this.getLightLevel(x, y);
                 if (light >= 0.95) continue; // Fully lit, skip
 
@@ -287,6 +305,9 @@ export class Renderer {
             for (let x = range.startX; x <= range.endX; x++) {
                 const tile = world.getTile(x, y);
                 if (tile === TILE_TYPES.AIR) continue;
+
+                // Skip sky tiles in the tiles pass (drawn in background)
+                if (tile === TILE_TYPES.SKY) continue;
 
                 const screenX = x * TILE_SIZE;
                 const screenY = y * TILE_SIZE;
@@ -602,6 +623,13 @@ export class Renderer {
         const data = imageData.data;
 
         const colors = {
+            // Surface
+            [TILE_TYPES.SKY]: [74, 144, 200],
+            [TILE_TYPES.GRASS]: [45, 138, 45],
+            [TILE_TYPES.SURFACE_DIRT]: [90, 69, 48],
+            [TILE_TYPES.SURFACE_STONE]: [106, 106, 106],
+            [TILE_TYPES.MINE_SUPPORT]: [107, 68, 35],
+            [TILE_TYPES.MINE_LADDER]: [122, 85, 51],
             // Layer 1
             [TILE_TYPES.DIRT]: [58, 39, 24],
             [TILE_TYPES.STONE]: [74, 74, 74],
