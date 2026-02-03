@@ -5,7 +5,8 @@
  */
 
 import {
-    PLAYER, TILE_SIZE, TILE_TYPES, TILE_PROPERTIES, TOOLS, SONAR, BIOMES, LIVING_TOOLS
+    PLAYER, TILE_SIZE, TILE_TYPES, TILE_PROPERTIES, TOOLS, SONAR, BIOMES,
+    LIVING_TOOLS, EQUIPMENT_SLOTS, EQUIPMENT_SETS
 } from '../core/Constants.js';
 import { input } from '../core/Input.js';
 
@@ -42,13 +43,33 @@ export class Player {
         // Tool
         this.currentTool = TOOLS.DRILL;
 
-        // Living Tools equipped
+        // Living Tools equipped (5 slots)
         this.livingTools = {
             excavator: null,
-            movement: null,
-            vision: null,
-            storage: null,
+            suit: null,
+            backpack: null,
+            utility: null,
+            symbiote: null,
         };
+
+        // Legacy compatibility for movement/vision tools
+        this.movementTool = null;
+        this.visionTool = null;
+
+        // Biomass for feeding tools
+        this.biomass = 0;
+
+        // Set bonus effects
+        this.activeBonuses = [];
+
+        // Artifacts collected
+        this.artifacts = [];
+
+        // Artifact effects
+        this.permanentRevealRadius = 0;
+        this.machineSpeedMultiplier = 1;
+        this.oxygenEfficiency = 1;
+        this.heatResistance = 0;
 
         // Sonar
         this.sonarCooldown = 0;
@@ -257,10 +278,30 @@ export class Player {
 
         // Fluid damage
         if (this.inFluid) {
-            const props = TILE_PROPERTIES[this.inFluid];
-            if (props && props.damage > 0) {
-                this.takeDamage(props.damage * 0.01 * deltaTime);
+            // Check for lava immunity from Ignis set bonus
+            if (this.inFluid === TILE_TYPES.LAVA && this.lavaImmunity) {
+                // No damage, refill drill fuel instead
+                this.drillFuel = (this.drillFuel || 100);
+            } else {
+                const props = TILE_PROPERTIES[this.inFluid];
+                if (props && props.damage > 0) {
+                    const damageReduction = this.heatResistance || 0;
+                    this.takeDamage(props.damage * 0.01 * deltaTime * (1 - damageReduction));
+                }
             }
+        }
+
+        // Health regen from Vitae set bonus (near light sources)
+        if (this.hasSetBonus('healthRegen') && this.nearGlowingTile) {
+            this.heal(0.05 * deltaTime);
+        }
+
+        // Heat to speed bonus from Ignis set
+        if (this.heatToSpeedBonus > 0 && this.heat > 0) {
+            const heatRatio = this.heat / this.maxHeat;
+            this.speedMultiplier = 1 + (heatRatio * this.heatToSpeedBonus);
+        } else {
+            this.speedMultiplier = 1;
         }
     }
 
@@ -273,6 +314,7 @@ export class Player {
 
         // Reset oxygen station detection
         this.nearOxygenStation = false;
+        this.nearGlowingTile = false;
 
         // Check tiles in a 3x3 around player
         for (let dy = -1; dy <= 1; dy++) {
@@ -284,6 +326,7 @@ export class Player {
                     if (props.hot) this.nearHeat = true;
                     if (props.fluid && (dx === 0 && dy === 0)) this.inFluid = tile;
                     if (props.gas && (dx === 0 && dy === 0)) this.inGas = true;
+                    if (props.glows) this.nearGlowingTile = true;
                 }
 
                 // Check for oxygen station
@@ -792,8 +835,129 @@ export class Player {
         const toolData = LIVING_TOOLS[toolId.toUpperCase()];
         if (!toolData) return false;
 
-        this.livingTools[toolData.category] = toolId;
-        return true;
+        // Map category to slot
+        const categoryToSlot = {
+            excavator: 'excavator',
+            suit: 'suit',
+            backpack: 'backpack',
+            utility: 'utility',
+            symbiote: 'symbiote',
+            // Legacy categories
+            movement: 'utility',
+            vision: 'utility',
+            storage: 'backpack',
+        };
+
+        const slot = categoryToSlot[toolData.category];
+        if (slot && this.livingTools.hasOwnProperty(slot)) {
+            this.livingTools[slot] = toolData;
+            this.calculateSetBonuses();
+            return true;
+        }
+
+        return false;
+    }
+
+    /**
+     * Unequip a living tool from slot
+     */
+    unequipLivingTool(slot) {
+        if (this.livingTools.hasOwnProperty(slot)) {
+            this.livingTools[slot] = null;
+            this.calculateSetBonuses();
+            return true;
+        }
+        return false;
+    }
+
+    /**
+     * Calculate active set bonuses
+     */
+    calculateSetBonuses() {
+        const broodCounts = { vitae: 0, ignis: 0, umbra: 0 };
+
+        // Count items per brood
+        for (const tool of Object.values(this.livingTools)) {
+            if (tool && tool.brood) {
+                broodCounts[tool.brood]++;
+            }
+        }
+
+        // Find active bonuses
+        this.activeBonuses = [];
+
+        for (const [broodId, count] of Object.entries(broodCounts)) {
+            if (count >= 2) {
+                const set = EQUIPMENT_SETS[broodId.toUpperCase()];
+                if (set) {
+                    if (count >= 2 && set.bonuses[2]) {
+                        this.activeBonuses.push({ ...set.bonuses[2], brood: broodId, count: 2 });
+                    }
+                    if (count >= 3 && set.bonuses[3]) {
+                        this.activeBonuses.push({ ...set.bonuses[3], brood: broodId, count: 3 });
+                    }
+                }
+            }
+        }
+
+        // Apply set bonus effects
+        this.applySetBonuses();
+    }
+
+    /**
+     * Apply set bonus effects
+     */
+    applySetBonuses() {
+        // Reset bonus-affected stats
+        this.lavaImmunity = false;
+        this.wallWalkEnabled = false;
+        this.pipeTravel = false;
+        this.phaseChance = 0;
+        this.heatToSpeedBonus = 0;
+
+        for (const bonus of this.activeBonuses) {
+            switch (bonus.effect) {
+                case 'healthRegen':
+                    // Applied in updateSurvival
+                    break;
+                case 'pipeTravel':
+                    this.pipeTravel = true;
+                    break;
+                case 'heatToSpeed':
+                    this.heatToSpeedBonus = bonus.value;
+                    break;
+                case 'lavaImmunity':
+                    this.lavaImmunity = true;
+                    break;
+                case 'phaseChance':
+                    this.phaseChance = bonus.value;
+                    break;
+                case 'wallWalk':
+                    this.wallWalkEnabled = true;
+                    break;
+            }
+        }
+    }
+
+    /**
+     * Check if has a specific set bonus
+     */
+    hasSetBonus(effectName) {
+        return this.activeBonuses.some(b => b.effect === effectName);
+    }
+
+    /**
+     * Collect biomass from killed enemies
+     */
+    collectBiomass(amount) {
+        this.biomass += amount;
+    }
+
+    /**
+     * Get equipped tool for a slot
+     */
+    getEquippedTool(slot) {
+        return this.livingTools[slot] || null;
     }
 
     /**

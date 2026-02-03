@@ -15,6 +15,7 @@ import { World } from '../world/World.js';
 import { Player } from '../entities/Player.js';
 import { UIManager } from '../ui/UIManager.js';
 import { PhysicsSystem } from '../systems/PhysicsSystem.js';
+import { CraftingSystem } from '../systems/CraftingSystem.js';
 
 export class Game {
     constructor() {
@@ -47,6 +48,7 @@ export class Game {
         this.world = new World();
         this.ui = new UIManager();
         this.physics = null; // Initialized after world
+        this.crafting = new CraftingSystem();
         this.player = null;
 
         // Timing
@@ -76,6 +78,22 @@ export class Game {
             if (this.player) {
                 this.player.equipLivingTool(toolId);
                 this.ui.addMessage(`Equipped ${toolId.replace(/_/g, ' ')}`, 'discovery');
+            }
+        };
+
+        this.ui.onCraft = (chassisId, strainType, catalystRarity) => {
+            if (this.player) {
+                const result = this.crafting.craft(this.player, chassisId, strainType, catalystRarity);
+                if (result.success) {
+                    this.ui.addMessage(`Crafted: ${result.tool.name}!`, 'discovery');
+                    // Auto-equip if slot is empty
+                    const slot = result.tool.category;
+                    if (!this.player.livingTools[slot]) {
+                        this.player.equipLivingTool(result.tool.id);
+                    }
+                } else {
+                    this.ui.addMessage(`Crafting failed: ${result.error}`, 'warning');
+                }
             }
         };
 
@@ -199,6 +217,11 @@ export class Game {
         // Handle equipment toggle
         if (input.isActionJustPressed('EQUIPMENT')) {
             this.ui.toggleEquipment(this.player);
+        }
+
+        // Handle Bio-Forge toggle
+        if (input.isActionJustPressed('BIOFORGE')) {
+            this.ui.toggleBioForge(this.player);
         }
 
         // Handle recall
@@ -335,8 +358,16 @@ export class Game {
         const biome = this.player ? this.player.getCurrentBiome() : BIOMES.SURFACE;
         this.renderer.drawBackground(this.camera, depth, biome);
 
+        // Compute lighting
+        if (this.player) {
+            this.renderer.computeLightMap(this.world, this.camera, this.player);
+        }
+
         // Draw tiles
         this.renderer.drawTiles(this.world, this.camera);
+
+        // Draw darkness overlay
+        this.renderer.drawDarknessOverlay(this.camera);
 
         // Draw sonar effects
         if (this.player && this.player.sonarActive) {

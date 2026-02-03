@@ -4,7 +4,7 @@
  * Full inventory, equipment, and recall systems
  */
 
-import { TOOLS, SONAR, BIOMES, LIVING_TOOLS } from '../core/Constants.js';
+import { TOOLS, SONAR, BIOMES, LIVING_TOOLS, CHASSIS_TYPES, EQUIPMENT_SETS } from '../core/Constants.js';
 
 export class UIManager {
     constructor() {
@@ -36,22 +36,36 @@ export class UIManager {
             fossilInventory: document.getElementById('fossil-inventory'),
             materialsInventory: document.getElementById('materials-inventory'),
             equipmentInventory: document.getElementById('equipment-inventory'),
-            // Equipment slots
+            // Equipment slots (5 slots)
             slotExcavator: document.getElementById('slot-excavator'),
-            slotMovement: document.getElementById('slot-movement'),
-            slotVision: document.getElementById('slot-vision'),
-            slotStorage: document.getElementById('slot-storage'),
+            slotSuit: document.getElementById('slot-suit'),
+            slotBackpack: document.getElementById('slot-backpack'),
+            slotUtility: document.getElementById('slot-utility'),
+            slotSymbiote: document.getElementById('slot-symbiote'),
             descExcavator: document.getElementById('desc-excavator'),
-            descMovement: document.getElementById('desc-movement'),
-            descVision: document.getElementById('desc-vision'),
-            descStorage: document.getElementById('desc-storage'),
+            descSuit: document.getElementById('desc-suit'),
+            descBackpack: document.getElementById('desc-backpack'),
+            descUtility: document.getElementById('desc-utility'),
+            descSymbiote: document.getElementById('desc-symbiote'),
             availableToolsGrid: document.getElementById('available-tools-grid'),
+            setBonusDisplay: document.getElementById('set-bonus-display'),
+            biomassValue: document.getElementById('biomass-value'),
+            // Bio-Forge
+            bioforgePanel: document.getElementById('bioforge-panel'),
+            chassisSelect: document.getElementById('chassis-select'),
+            strainSelect: document.getElementById('strain-select'),
+            catalystSelect: document.getElementById('catalyst-select'),
+            forgeResult: document.getElementById('forge-result'),
+            forgeCost: document.getElementById('forge-cost'),
+            forgeButton: document.getElementById('forge-button'),
         };
 
         // State
         this.inventoryOpen = false;
         this.equipmentOpen = false;
+        this.bioforgeOpen = false;
         this.currentPlayer = null;
+        this.craftingSystem = null;
 
         // Message queue
         this.messages = [];
@@ -72,6 +86,7 @@ export class UIManager {
         this.setupToolSlots();
         this.setupPanelCloseButtons();
         this.setupRecallButton();
+        this.setupBioForge();
     }
 
     /**
@@ -97,6 +112,8 @@ export class UIManager {
                     this.hideInventory();
                 } else if (panelType === 'equipment') {
                     this.hideEquipment();
+                } else if (panelType === 'bioforge') {
+                    this.hideBioForge();
                 }
             });
         });
@@ -117,6 +134,106 @@ export class UIManager {
     onToolSelected(tool) {}
     onRecallClicked() {}
     onEquipTool(toolId, slot) {}
+    onCraft(chassisId, strainType, catalystRarity) {}
+
+    /**
+     * Setup Bio-Forge UI
+     */
+    setupBioForge() {
+        // Populate chassis select
+        if (this.elements.chassisSelect) {
+            for (const [key, chassis] of Object.entries(CHASSIS_TYPES)) {
+                const option = document.createElement('option');
+                option.value = chassis.id;
+                option.textContent = `${chassis.name} (Tier ${chassis.tier})`;
+                this.elements.chassisSelect.appendChild(option);
+            }
+
+            this.elements.chassisSelect.addEventListener('change', () => this.updateForgePreview());
+        }
+
+        if (this.elements.strainSelect) {
+            this.elements.strainSelect.addEventListener('change', () => this.updateForgePreview());
+        }
+
+        if (this.elements.catalystSelect) {
+            this.elements.catalystSelect.addEventListener('change', () => this.updateForgePreview());
+        }
+
+        if (this.elements.forgeButton) {
+            this.elements.forgeButton.addEventListener('click', () => {
+                const chassis = this.elements.chassisSelect?.value;
+                const strain = this.elements.strainSelect?.value;
+                const catalyst = this.elements.catalystSelect?.value || null;
+
+                if (chassis && strain) {
+                    this.onCraft(chassis, strain, catalyst);
+                }
+            });
+        }
+    }
+
+    /**
+     * Update forge preview
+     */
+    updateForgePreview() {
+        const chassisId = this.elements.chassisSelect?.value;
+        const strainType = this.elements.strainSelect?.value;
+
+        if (!chassisId || !strainType) {
+            if (this.elements.forgeResult) {
+                this.elements.forgeResult.textContent = 'Select chassis and strain';
+            }
+            if (this.elements.forgeButton) {
+                this.elements.forgeButton.disabled = true;
+            }
+            return;
+        }
+
+        // Find recipe result
+        const recipeKey = `${chassisId}+${strainType}`;
+        const recipes = {
+            'basic_drill+vitae': 'vorpal_claw',
+            'basic_drill+ignis': 'magma_worm',
+            'basic_drill+umbra': 'void_borer',
+            'titanium_drill+vitae': 'spore_drill',
+            'titanium_drill+ignis': 'inferno_jet',
+            'titanium_drill+umbra': 'singularity_pick',
+            'basic_suit+vitae': 'photosynthesis_plating',
+            'thermal_suit+ignis': 'thermal_vent_rig',
+            'phase_suit+umbra': 'phase_shift_armor',
+            'basic_pack+vitae': 'gulper_sack',
+            'refinery_pack+ignis': 'mobile_refinery',
+            'basic_pack+umbra': 'turret_mount',
+            'grapple_frame+vitae': 'vine_grapple',
+            'scanner_frame+ignis': 'ore_scanner',
+            'grapple_frame+umbra': 'stasis_field',
+        };
+
+        const resultId = recipes[recipeKey];
+
+        if (resultId) {
+            const tool = LIVING_TOOLS[resultId.toUpperCase()];
+            if (tool && this.elements.forgeResult) {
+                this.elements.forgeResult.innerHTML = `
+                    <div class="preview-tool ${strainType}">
+                        <strong>${tool.name}</strong><br>
+                        <span>${tool.description}</span>
+                    </div>
+                `;
+            }
+            if (this.elements.forgeButton) {
+                this.elements.forgeButton.disabled = false;
+            }
+        } else {
+            if (this.elements.forgeResult) {
+                this.elements.forgeResult.textContent = 'Invalid combination';
+            }
+            if (this.elements.forgeButton) {
+                this.elements.forgeButton.disabled = true;
+            }
+        }
+    }
 
     /**
      * Update loading progress
@@ -462,35 +579,75 @@ export class UIManager {
      * Render equipment slots and available tools
      */
     renderEquipment(player) {
-        // Render equipped items
+        // Render equipped items (5 slots)
         this.renderEquipmentSlot('excavator', player.livingTools.excavator, this.elements.slotExcavator, this.elements.descExcavator);
-        this.renderEquipmentSlot('movement', player.livingTools.movement, this.elements.slotMovement, this.elements.descMovement);
-        this.renderEquipmentSlot('vision', player.livingTools.vision, this.elements.slotVision, this.elements.descVision);
-        this.renderEquipmentSlot('storage', player.livingTools.storage, this.elements.slotStorage, this.elements.descStorage);
+        this.renderEquipmentSlot('suit', player.livingTools.suit, this.elements.slotSuit, this.elements.descSuit);
+        this.renderEquipmentSlot('backpack', player.livingTools.backpack, this.elements.slotBackpack, this.elements.descBackpack);
+        this.renderEquipmentSlot('utility', player.livingTools.utility, this.elements.slotUtility, this.elements.descUtility);
+        this.renderEquipmentSlot('symbiote', player.livingTools.symbiote, this.elements.slotSymbiote, this.elements.descSymbiote);
+
+        // Render set bonuses
+        this.renderSetBonuses(player);
+
+        // Render biomass
+        if (this.elements.biomassValue) {
+            this.elements.biomassValue.textContent = player.biomass || 0;
+        }
 
         // Render available tools
         this.renderAvailableTools(player);
     }
 
     /**
+     * Render set bonuses
+     */
+    renderSetBonuses(player) {
+        if (!this.elements.setBonusDisplay) return;
+
+        if (!player.activeBonuses || player.activeBonuses.length === 0) {
+            this.elements.setBonusDisplay.innerHTML = '<div class="no-bonus">No set bonuses active</div>';
+            return;
+        }
+
+        const html = player.activeBonuses.map(bonus => `
+            <div class="set-bonus ${bonus.brood}">
+                <span class="bonus-name">${bonus.name}</span>
+                <span class="bonus-count">(${bonus.count} pieces)</span>
+            </div>
+        `).join('');
+
+        this.elements.setBonusDisplay.innerHTML = html;
+    }
+
+    /**
      * Render a single equipment slot
      */
-    renderEquipmentSlot(slotType, equippedId, slotEl, descEl) {
+    renderEquipmentSlot(slotType, equipped, slotEl, descEl) {
         if (!slotEl || !descEl) return;
 
         const slot = slotEl.closest('.equipment-slot');
 
-        if (equippedId) {
-            const toolData = LIVING_TOOLS[equippedId.toUpperCase()];
+        if (equipped) {
+            // Handle both tool objects and tool IDs
+            const toolData = typeof equipped === 'string'
+                ? LIVING_TOOLS[equipped.toUpperCase()]
+                : equipped;
+
             if (toolData) {
-                slotEl.innerHTML = `<div class="equipped-tool">${toolData.name}</div>`;
+                const broodClass = toolData.brood || '';
+                const levelInfo = toolData.level ? ` Lv.${toolData.level}` : '';
+                slotEl.innerHTML = `
+                    <div class="equipped-tool ${broodClass}">
+                        ${toolData.name}${levelInfo}
+                    </div>
+                `;
                 descEl.textContent = toolData.description;
-                slot.classList.add('filled');
+                if (slot) slot.classList.add('filled');
             }
         } else {
             slotEl.innerHTML = '<span class="empty-slot">Empty</span>';
             descEl.textContent = this.getSlotHint(slotType);
-            slot.classList.remove('filled');
+            if (slot) slot.classList.remove('filled');
         }
     }
 
@@ -499,10 +656,11 @@ export class UIManager {
      */
     getSlotHint(slotType) {
         const hints = {
-            excavator: 'Equip a mining tool for faster digging',
-            movement: 'Equip mobility gear for traversal',
-            vision: 'Equip sensing tools to see better',
-            storage: 'Equip storage upgrades for more capacity',
+            excavator: 'Equip a mining tool for digging',
+            suit: 'Equip an exosuit for protection',
+            backpack: 'Equip storage or support gear',
+            utility: 'Equip a gadget for abilities',
+            symbiote: 'Equip a companion creature',
         };
         return hints[slotType] || 'Equip a tool';
     }
@@ -556,11 +714,45 @@ export class UIManager {
         return true;
     }
 
+    // ============ BIO-FORGE SYSTEM ============
+
+    /**
+     * Show Bio-Forge panel
+     */
+    showBioForge(player) {
+        if (!this.elements.bioforgePanel) return;
+
+        this.currentPlayer = player;
+        this.bioforgeOpen = true;
+        this.elements.bioforgePanel.classList.remove('hidden');
+    }
+
+    /**
+     * Hide Bio-Forge panel
+     */
+    hideBioForge() {
+        if (this.elements.bioforgePanel) {
+            this.elements.bioforgePanel.classList.add('hidden');
+        }
+        this.bioforgeOpen = false;
+    }
+
+    /**
+     * Toggle Bio-Forge
+     */
+    toggleBioForge(player) {
+        if (this.bioforgeOpen) {
+            this.hideBioForge();
+        } else {
+            this.showBioForge(player);
+        }
+    }
+
     /**
      * Check if any panel is open
      */
     isAnyPanelOpen() {
-        return this.inventoryOpen || this.equipmentOpen;
+        return this.inventoryOpen || this.equipmentOpen || this.bioforgeOpen;
     }
 
     /**
@@ -569,6 +761,7 @@ export class UIManager {
     closeAllPanels() {
         this.hideInventory();
         this.hideEquipment();
+        this.hideBioForge();
     }
 
     /**

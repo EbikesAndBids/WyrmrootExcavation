@@ -82,6 +82,7 @@
             <div id="controls-help">
                 <span>[I] Inventory</span>
                 <span>[Q] Equipment</span>
+                <span>[B] Bio-Forge</span>
                 <span>[H] Recall</span>
                 <span>[O] Place O2</span>
             </div>
@@ -128,40 +129,106 @@
                 <button class="close-btn" data-close="equipment">&times;</button>
             </div>
             <div class="panel-content">
+                <!-- Set Bonus Indicator -->
+                <div id="set-bonus-display"></div>
+
                 <div class="equipment-slots">
                     <div class="equipment-slot" data-slot="excavator">
                         <div class="slot-label">Excavator</div>
                         <div class="slot-content" id="slot-excavator">
                             <span class="empty-slot">Empty</span>
                         </div>
-                        <div class="slot-description" id="desc-excavator">Equip a mining tool</div>
+                        <div class="slot-description" id="desc-excavator">Mining tool for digging</div>
                     </div>
-                    <div class="equipment-slot" data-slot="movement">
-                        <div class="slot-label">Movement</div>
-                        <div class="slot-content" id="slot-movement">
+                    <div class="equipment-slot" data-slot="suit">
+                        <div class="slot-label">Suit</div>
+                        <div class="slot-content" id="slot-suit">
                             <span class="empty-slot">Empty</span>
                         </div>
-                        <div class="slot-description" id="desc-movement">Equip mobility gear</div>
+                        <div class="slot-description" id="desc-suit">Exosuit for protection</div>
                     </div>
-                    <div class="equipment-slot" data-slot="vision">
-                        <div class="slot-label">Vision</div>
-                        <div class="slot-content" id="slot-vision">
+                    <div class="equipment-slot" data-slot="backpack">
+                        <div class="slot-label">Backpack</div>
+                        <div class="slot-content" id="slot-backpack">
                             <span class="empty-slot">Empty</span>
                         </div>
-                        <div class="slot-description" id="desc-vision">Equip sensing tool</div>
+                        <div class="slot-description" id="desc-backpack">Storage and support</div>
                     </div>
-                    <div class="equipment-slot" data-slot="storage">
-                        <div class="slot-label">Storage</div>
-                        <div class="slot-content" id="slot-storage">
+                    <div class="equipment-slot" data-slot="utility">
+                        <div class="slot-label">Utility</div>
+                        <div class="slot-content" id="slot-utility">
                             <span class="empty-slot">Empty</span>
                         </div>
-                        <div class="slot-description" id="desc-storage">Equip storage upgrade</div>
+                        <div class="slot-description" id="desc-utility">Gadget slot</div>
+                    </div>
+                    <div class="equipment-slot" data-slot="symbiote">
+                        <div class="slot-label">Symbiote</div>
+                        <div class="slot-content" id="slot-symbiote">
+                            <span class="empty-slot">Empty</span>
+                        </div>
+                        <div class="slot-description" id="desc-symbiote">Companion creature</div>
                     </div>
                 </div>
+
+                <!-- Biomass Display -->
+                <div id="biomass-display">
+                    <span class="biomass-icon">&#9863;</span>
+                    <span>Biomass: </span>
+                    <span id="biomass-value">0</span>
+                </div>
+
                 <div class="available-tools">
                     <h3>Available Tools</h3>
                     <div class="tools-grid" id="available-tools-grid"></div>
                 </div>
+            </div>
+        </div>
+
+        <!-- Bio-Forge Panel -->
+        <div id="bioforge-panel" class="ui-panel hidden">
+            <div class="panel-header">
+                <h2>Bio-Forge</h2>
+                <button class="close-btn" data-close="bioforge">&times;</button>
+            </div>
+            <div class="panel-content">
+                <div class="forge-description">
+                    Combine Chassis + Strain + Catalyst to create living equipment.
+                </div>
+                <div class="forge-inputs">
+                    <div class="forge-slot" id="chassis-slot">
+                        <div class="slot-label">Chassis</div>
+                        <select id="chassis-select">
+                            <option value="">Select Chassis...</option>
+                        </select>
+                    </div>
+                    <div class="forge-plus">+</div>
+                    <div class="forge-slot" id="strain-slot">
+                        <div class="slot-label">Strain</div>
+                        <select id="strain-select">
+                            <option value="">Select Strain...</option>
+                            <option value="vitae" class="vitae">Vitae (Forest)</option>
+                            <option value="ignis" class="ignis">Ignis (Fire)</option>
+                            <option value="umbra" class="umbra">Umbra (Void)</option>
+                        </select>
+                    </div>
+                    <div class="forge-plus">+</div>
+                    <div class="forge-slot" id="catalyst-slot">
+                        <div class="slot-label">Catalyst (optional)</div>
+                        <select id="catalyst-select">
+                            <option value="">No Catalyst</option>
+                            <option value="common">Common</option>
+                            <option value="uncommon">Uncommon</option>
+                            <option value="rare">Rare</option>
+                            <option value="legendary">Legendary</option>
+                        </select>
+                    </div>
+                </div>
+                <div id="forge-preview">
+                    <div class="preview-label">Result Preview:</div>
+                    <div id="forge-result">Select chassis and strain</div>
+                </div>
+                <div id="forge-cost"></div>
+                <button id="forge-button" class="forge-btn" disabled>CRAFT</button>
             </div>
         </div>
 

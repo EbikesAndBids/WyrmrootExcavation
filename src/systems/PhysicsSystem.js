@@ -1,23 +1,34 @@
 /**
  * Physics System
  * Handles falling sand/gravel, fluid simulation, and gas behavior
+ * Uses cellular automata for realistic fluid dynamics
  */
 
-import { TILE_SIZE, TILE_TYPES, TILE_PROPERTIES, PHYSICS } from '../core/Constants.js';
+import { TILE_SIZE, TILE_TYPES, TILE_PROPERTIES, PHYSICS, CHUNK_SIZE } from '../core/Constants.js';
 
 export class PhysicsSystem {
     constructor(world) {
         this.world = world;
         this.lastGravityTick = 0;
         this.lastFluidTick = 0;
+        this.lastGasTick = 0;
 
         // Track active physics tiles for optimization
         this.activeFallingTiles = new Set();
-        this.activeFluidTiles = new Set();
+        this.activeFluidTiles = new Map(); // key -> { type, level (0-8) }
         this.activeGasTiles = new Set();
 
         // Pending updates (to avoid modifying while iterating)
         this.pendingUpdates = [];
+
+        // Fluid levels - stored separately from tile data
+        this.fluidLevels = new Map(); // "x,y" -> level (0-8)
+
+        // Maximum fluid level
+        this.maxFluidLevel = PHYSICS.FLUID_MAX_LEVEL;
+
+        // Fluid simulation timing
+        this.fluidTickRate = 50; // ms between fluid updates
     }
 
     /**
@@ -34,7 +45,10 @@ export class PhysicsSystem {
             this.activeFallingTiles.add(key);
         }
         if (props.fluid) {
-            this.activeFluidTiles.add(key);
+            this.activeFluidTiles.set(key, { type: tile, level: this.maxFluidLevel });
+            if (!this.fluidLevels.has(key)) {
+                this.fluidLevels.set(key, this.maxFluidLevel);
+            }
         }
         if (props.gas) {
             this.activeGasTiles.add(key);
@@ -49,6 +63,28 @@ export class PhysicsSystem {
         this.activeFallingTiles.delete(key);
         this.activeFluidTiles.delete(key);
         this.activeGasTiles.delete(key);
+        this.fluidLevels.delete(key);
+    }
+
+    /**
+     * Get fluid level at position
+     */
+    getFluidLevel(x, y) {
+        const key = `${x},${y}`;
+        return this.fluidLevels.get(key) || 0;
+    }
+
+    /**
+     * Set fluid level at position
+     */
+    setFluidLevel(x, y, level) {
+        const key = `${x},${y}`;
+        if (level <= 0) {
+            this.fluidLevels.delete(key);
+            this.activeFluidTiles.delete(key);
+        } else {
+            this.fluidLevels.set(key, Math.min(this.maxFluidLevel, level));
+        }
     }
 
     /**
@@ -61,11 +97,17 @@ export class PhysicsSystem {
             this.lastGravityTick = currentTime;
         }
 
-        // Fluid updates
-        this.updateFluids(deltaTime);
+        // Fluid updates (cellular automata)
+        if (currentTime - this.lastFluidTick >= this.fluidTickRate) {
+            this.updateFluids(deltaTime);
+            this.lastFluidTick = currentTime;
+        }
 
         // Gas updates
-        this.updateGases(deltaTime);
+        if (currentTime - this.lastGasTick >= PHYSICS.GRAVITY_TICK * 2) {
+            this.updateGases(deltaTime);
+            this.lastGasTick = currentTime;
+        }
 
         // Apply pending updates
         this.applyPendingUpdates();
@@ -103,7 +145,8 @@ export class PhysicsSystem {
                 if (belowProps && belowProps.fluid) {
                     // Displace fluid upward
                     this.pendingUpdates.push({ x, y, tile: below });
-                    this.activeFluidTiles.add(`${x},${y}`);
+                    this.activeFluidTiles.set(`${x},${y}`, { type: below, level: this.getFluidLevel(x, y + 1) });
+                    this.setFluidLevel(x, y, this.getFluidLevel(x, y + 1));
                 }
             } else {
                 // Try to slide diagonally
@@ -132,61 +175,174 @@ export class PhysicsSystem {
     }
 
     /**
-     * Update fluid tiles (water, lava, acid)
+     * Update fluid tiles using cellular automata
+     * Each cell has a level 0-8, and fluid flows to equalize levels
      */
     updateFluids(deltaTime) {
-        const toRemove = [];
-        const toAdd = [];
+        const updates = new Map(); // key -> new level
 
-        for (const key of this.activeFluidTiles) {
+        // Process all active fluid tiles
+        for (const [key, fluidData] of this.activeFluidTiles) {
             const [x, y] = key.split(',').map(Number);
             const tile = this.world.getTile(x, y);
             const props = TILE_PROPERTIES[tile];
 
             if (!props || !props.fluid) {
-                toRemove.push(key);
+                this.unregisterTile(x, y);
                 continue;
             }
 
-            let moved = false;
+            const currentLevel = this.getFluidLevel(x, y) || this.maxFluidLevel;
+            if (currentLevel <= 0) continue;
 
-            // Try to flow down first
+            let remainingLevel = currentLevel;
+
+            // 1. Try to flow down first (gravity)
             const below = this.world.getTile(x, y + 1);
+            const belowProps = TILE_PROPERTIES[below];
+
             if (below === TILE_TYPES.AIR) {
-                this.pendingUpdates.push({ x, y, tile: TILE_TYPES.AIR });
-                this.pendingUpdates.push({ x, y: y + 1, tile });
-                toRemove.push(key);
-                toAdd.push(`${x},${y + 1}`);
-                moved = true;
-            } else if (below !== tile) {
-                // Try to spread horizontally
-                const spreadDir = Math.random() < 0.5 ? -1 : 1;
+                // Flow down into empty space
+                const belowKey = `${x},${y + 1}`;
+                const belowLevel = this.getFluidLevel(x, y + 1);
+                const spaceBelow = this.maxFluidLevel - belowLevel;
 
-                for (let dir of [spreadDir, -spreadDir]) {
-                    const sideX = x + dir;
-                    const side = this.world.getTile(sideX, y);
-                    const sideBelow = this.world.getTile(sideX, y + 1);
+                if (spaceBelow > 0) {
+                    const transfer = Math.min(remainingLevel, spaceBelow);
+                    remainingLevel -= transfer;
 
-                    if (side === TILE_TYPES.AIR) {
-                        // Spread sideways
+                    // Schedule updates
+                    updates.set(belowKey, (updates.get(belowKey) || belowLevel) + transfer);
+
+                    if (remainingLevel <= 0) {
                         this.pendingUpdates.push({ x, y, tile: TILE_TYPES.AIR });
-                        this.pendingUpdates.push({ x: sideX, y, tile });
-                        toRemove.push(key);
-                        toAdd.push(`${sideX},${y}`);
-                        moved = true;
-                        break;
+                    } else {
+                        this.pendingUpdates.push({ x, y: y + 1, tile });
+                    }
+                }
+            } else if (belowProps && belowProps.fluid && below === tile) {
+                // Combine with same fluid below
+                const belowKey = `${x},${y + 1}`;
+                const belowLevel = this.getFluidLevel(x, y + 1);
+                const spaceBelow = this.maxFluidLevel - belowLevel;
+
+                if (spaceBelow > 0) {
+                    const transfer = Math.min(remainingLevel, spaceBelow);
+                    remainingLevel -= transfer;
+                    updates.set(belowKey, (updates.get(belowKey) || belowLevel) + transfer);
+                }
+            }
+
+            // 2. Try to spread horizontally if blocked below
+            if (remainingLevel > 1) {
+                const directions = Math.random() < 0.5 ? [-1, 1] : [1, -1];
+
+                for (const dx of directions) {
+                    const sideX = x + dx;
+                    const side = this.world.getTile(sideX, y);
+                    const sideProps = TILE_PROPERTIES[side];
+                    const sideKey = `${sideX},${y}`;
+
+                    if (side === TILE_TYPES.AIR || (sideProps && sideProps.fluid && side === tile)) {
+                        const sideLevel = this.getFluidLevel(sideX, y);
+
+                        // Only flow if we have more than the side
+                        if (remainingLevel > sideLevel + 1) {
+                            // Equalize levels
+                            const totalLevel = remainingLevel + sideLevel;
+                            const avgLevel = Math.floor(totalLevel / 2);
+                            const remainder = totalLevel % 2;
+
+                            const newCurrentLevel = avgLevel + remainder;
+                            const newSideLevel = avgLevel;
+
+                            if (newSideLevel > 0 && side === TILE_TYPES.AIR) {
+                                this.pendingUpdates.push({ x: sideX, y, tile });
+                            }
+
+                            remainingLevel = newCurrentLevel;
+                            updates.set(sideKey, newSideLevel);
+                        }
+                    }
+
+                    // Also check diagonal down flow
+                    const diagBelow = this.world.getTile(sideX, y + 1);
+                    if (diagBelow === TILE_TYPES.AIR && side === TILE_TYPES.AIR) {
+                        // Flow diagonally down
+                        if (remainingLevel > 0) {
+                            const transfer = Math.min(remainingLevel, 2);
+                            remainingLevel -= transfer;
+                            const diagKey = `${sideX},${y + 1}`;
+                            updates.set(diagKey, (updates.get(diagKey) || 0) + transfer);
+                            this.pendingUpdates.push({ x: sideX, y: y + 1, tile });
+                        }
                     }
                 }
             }
 
-            // Check for lava + water = obsidian/steam
+            // Update current cell
+            if (remainingLevel !== currentLevel) {
+                if (remainingLevel <= 0) {
+                    this.pendingUpdates.push({ x, y, tile: TILE_TYPES.AIR });
+                    updates.set(key, 0);
+                } else {
+                    updates.set(key, remainingLevel);
+                }
+            }
+
+            // Check for lava interactions
             if (tile === TILE_TYPES.LAVA) {
                 this.checkLavaInteractions(x, y);
             }
         }
 
-        for (const key of toRemove) this.activeFluidTiles.delete(key);
-        for (const key of toAdd) this.activeFluidTiles.add(key);
+        // Apply fluid level updates
+        for (const [key, level] of updates) {
+            const [x, y] = key.split(',').map(Number);
+            this.setFluidLevel(x, y, level);
+
+            if (level > 0) {
+                const tile = this.world.getTile(x, y);
+                const props = TILE_PROPERTIES[tile];
+                if (props && props.fluid) {
+                    this.activeFluidTiles.set(key, { type: tile, level });
+                }
+            }
+        }
+
+        // Register neighbors of active fluids
+        for (const [key] of this.activeFluidTiles) {
+            const [x, y] = key.split(',').map(Number);
+            this.checkAndRegisterNeighborFluids(x, y);
+        }
+    }
+
+    /**
+     * Check and register neighboring fluid cells
+     */
+    checkAndRegisterNeighborFluids(x, y) {
+        const neighbors = [
+            { dx: -1, dy: 0 },
+            { dx: 1, dy: 0 },
+            { dx: 0, dy: 1 },
+        ];
+
+        for (const { dx, dy } of neighbors) {
+            const nx = x + dx;
+            const ny = y + dy;
+            const tile = this.world.getTile(nx, ny);
+            const props = TILE_PROPERTIES[tile];
+
+            if (props && props.fluid) {
+                const key = `${nx},${ny}`;
+                if (!this.activeFluidTiles.has(key)) {
+                    this.activeFluidTiles.set(key, { type: tile, level: this.maxFluidLevel });
+                    if (!this.fluidLevels.has(key)) {
+                        this.fluidLevels.set(key, this.maxFluidLevel);
+                    }
+                }
+            }
+        }
     }
 
     /**
@@ -209,8 +365,8 @@ export class PhysicsSystem {
                 // Lava + Water = Obsidian + Steam
                 this.pendingUpdates.push({ x, y, tile: TILE_TYPES.OBSIDIAN });
                 this.pendingUpdates.push({ x: nx, y: ny, tile: TILE_TYPES.STEAM });
-                this.activeFluidTiles.delete(`${x},${y}`);
-                this.activeFluidTiles.delete(`${nx},${ny}`);
+                this.unregisterTile(x, y);
+                this.unregisterTile(nx, ny);
                 this.activeGasTiles.add(`${nx},${ny}`);
                 break;
             }
@@ -243,11 +399,46 @@ export class PhysicsSystem {
                     toRemove.push(key);
                     toAdd.push(`${x},${y - 1}`);
                 } else {
-                    // Dissipate over time
-                    if (Math.random() < 0.01) {
+                    // Try to spread horizontally while rising
+                    const leftAbove = this.world.getTile(x - 1, y - 1);
+                    const rightAbove = this.world.getTile(x + 1, y - 1);
+                    const left = this.world.getTile(x - 1, y);
+                    const right = this.world.getTile(x + 1, y);
+
+                    if (leftAbove === TILE_TYPES.AIR && left === TILE_TYPES.AIR) {
                         this.pendingUpdates.push({ x, y, tile: TILE_TYPES.AIR });
+                        this.pendingUpdates.push({ x: x - 1, y: y - 1, tile });
                         toRemove.push(key);
+                        toAdd.push(`${x - 1},${y - 1}`);
+                    } else if (rightAbove === TILE_TYPES.AIR && right === TILE_TYPES.AIR) {
+                        this.pendingUpdates.push({ x, y, tile: TILE_TYPES.AIR });
+                        this.pendingUpdates.push({ x: x + 1, y: y - 1, tile });
+                        toRemove.push(key);
+                        toAdd.push(`${x + 1},${y - 1}`);
+                    } else {
+                        // Dissipate over time if trapped
+                        if (Math.random() < 0.02) {
+                            this.pendingUpdates.push({ x, y, tile: TILE_TYPES.AIR });
+                            toRemove.push(key);
+                        }
                     }
+                }
+            } else {
+                // Non-rising gases spread out
+                const dir = Math.random() < 0.5 ? -1 : 1;
+                const side = this.world.getTile(x + dir, y);
+
+                if (side === TILE_TYPES.AIR && Math.random() < 0.1) {
+                    this.pendingUpdates.push({ x, y, tile: TILE_TYPES.AIR });
+                    this.pendingUpdates.push({ x: x + dir, y, tile });
+                    toRemove.push(key);
+                    toAdd.push(`${x + dir},${y}`);
+                }
+
+                // Slowly dissipate
+                if (Math.random() < 0.005) {
+                    this.pendingUpdates.push({ x, y, tile: TILE_TYPES.AIR });
+                    toRemove.push(key);
                 }
             }
         }

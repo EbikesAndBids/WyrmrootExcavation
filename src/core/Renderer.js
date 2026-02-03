@@ -2,6 +2,7 @@
  * Renderer System - Optimized
  * Handles all canvas drawing operations with performance optimizations
  * Updated for three biomes and new tile types
+ * Now includes proper lighting/fog of war system
  */
 
 import { TILE_SIZE, TILE_TYPES, TILE_PROPERTIES, TILE_COLORS, BIOMES } from './Constants.js';
@@ -40,6 +41,25 @@ export class Renderer {
             [TILE_TYPES.UMBRA_OOZE]: 'rgba(100, 0, 150, 0.25)',
         };
 
+        // Light radii for glowing tiles (in tiles)
+        this.lightRadii = {
+            [TILE_TYPES.VITAE_CAPILLARY]: 2,
+            [TILE_TYPES.VITAE_ROOT]: 3,
+            [TILE_TYPES.VITAE_CORE]: 5,
+            [TILE_TYPES.IGNIS_CAPILLARY]: 3,
+            [TILE_TYPES.IGNIS_ROOT]: 4,
+            [TILE_TYPES.IGNIS_CORE]: 6,
+            [TILE_TYPES.UMBRA_CAPILLARY]: 2,
+            [TILE_TYPES.UMBRA_ROOT]: 3,
+            [TILE_TYPES.UMBRA_CORE]: 4,
+            [TILE_TYPES.AMBER]: 2,
+            [TILE_TYPES.CRYSTAL]: 4,
+            [TILE_TYPES.LAVA]: 5,
+            [TILE_TYPES.ACID]: 2,
+            [TILE_TYPES.UMBRA_OOZE]: 3,
+            [TILE_TYPES.OXYGEN_STATION]: 4,
+        };
+
         // Pre-render glow sprite
         this.glowSprite = this.createGlowSprite();
 
@@ -54,6 +74,18 @@ export class Renderer {
 
         // Pulse value (updated once per frame, not per tile)
         this.pulseValue = 1;
+
+        // Lighting system
+        this.playerLightRadius = 8; // tiles
+        this.lightMap = null;
+        this.lightMapWidth = 0;
+        this.lightMapHeight = 0;
+        this.lightMapStartX = 0;
+        this.lightMapStartY = 0;
+
+        // Create offscreen canvas for darkness overlay
+        this.darknessCanvas = document.createElement('canvas');
+        this.darknessCtx = this.darknessCanvas.getContext('2d');
     }
 
     /**
@@ -136,6 +168,109 @@ export class Renderer {
         // Use biome ambient color
         this.ctx.fillStyle = biome ? biome.ambientColor : this.ambientColor;
         this.ctx.fillRect(pos.x, pos.y, this.canvas.width, this.canvas.height);
+    }
+
+    /**
+     * Compute light map for visible area
+     */
+    computeLightMap(world, camera, player) {
+        const range = camera.getVisibleTileRange();
+        const padding = 10; // Extra tiles for light bleed
+
+        this.lightMapStartX = range.startX - padding;
+        this.lightMapStartY = range.startY - padding;
+        this.lightMapWidth = range.endX - range.startX + 1 + padding * 2;
+        this.lightMapHeight = range.endY - range.startY + 1 + padding * 2;
+
+        // Initialize light map to 0 (complete darkness)
+        this.lightMap = new Float32Array(this.lightMapWidth * this.lightMapHeight);
+
+        // Player position in tiles
+        const playerTileX = Math.floor((player.x + player.width / 2) / TILE_SIZE);
+        const playerTileY = Math.floor((player.y + player.height / 2) / TILE_SIZE);
+
+        // Add player light
+        this.addLight(playerTileX, playerTileY, this.playerLightRadius, 1.0);
+
+        // Scan for light-emitting tiles
+        for (let y = range.startY - padding; y <= range.endY + padding; y++) {
+            for (let x = range.startX - padding; x <= range.endX + padding; x++) {
+                const tile = world.getTile(x, y);
+                const radius = this.lightRadii[tile];
+                if (radius) {
+                    // Glowing tiles emit light
+                    this.addLight(x, y, radius, 0.7);
+                }
+            }
+        }
+    }
+
+    /**
+     * Add a light source to the light map
+     */
+    addLight(centerX, centerY, radius, intensity) {
+        const radiusSq = radius * radius;
+
+        for (let dy = -radius; dy <= radius; dy++) {
+            for (let dx = -radius; dx <= radius; dx++) {
+                const distSq = dx * dx + dy * dy;
+                if (distSq > radiusSq) continue;
+
+                const mapX = centerX + dx - this.lightMapStartX;
+                const mapY = centerY + dy - this.lightMapStartY;
+
+                if (mapX < 0 || mapX >= this.lightMapWidth || mapY < 0 || mapY >= this.lightMapHeight) continue;
+
+                // Smooth falloff
+                const dist = Math.sqrt(distSq);
+                const falloff = 1 - (dist / radius);
+                const lightValue = intensity * falloff * falloff; // Quadratic falloff
+
+                const idx = mapY * this.lightMapWidth + mapX;
+                this.lightMap[idx] = Math.min(1, this.lightMap[idx] + lightValue);
+            }
+        }
+    }
+
+    /**
+     * Get light level at a tile position
+     */
+    getLightLevel(tileX, tileY) {
+        if (!this.lightMap) return 1;
+
+        const mapX = tileX - this.lightMapStartX;
+        const mapY = tileY - this.lightMapStartY;
+
+        if (mapX < 0 || mapX >= this.lightMapWidth || mapY < 0 || mapY >= this.lightMapHeight) {
+            return 0;
+        }
+
+        return this.lightMap[mapY * this.lightMapWidth + mapX];
+    }
+
+    /**
+     * Draw darkness overlay after tiles
+     */
+    drawDarknessOverlay(camera) {
+        if (!this.lightMap) return;
+
+        const range = camera.getVisibleTileRange();
+        const ctx = this.ctx;
+
+        // Draw darkness per tile
+        for (let y = range.startY; y <= range.endY; y++) {
+            for (let x = range.startX; x <= range.endX; x++) {
+                const light = this.getLightLevel(x, y);
+                if (light >= 0.95) continue; // Fully lit, skip
+
+                const darkness = 1 - light;
+                const screenX = x * TILE_SIZE;
+                const screenY = y * TILE_SIZE;
+
+                ctx.fillStyle = `rgba(0, 0, 0, ${darkness * 0.9})`;
+                ctx.fillRect(screenX, screenY, TILE_SIZE, TILE_SIZE);
+            }
+        }
     }
 
     /**

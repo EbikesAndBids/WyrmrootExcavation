@@ -632,3 +632,219 @@ body {
 ::-webkit-scrollbar-thumb:hover {
     background: #4a4a4a;
 }
+
+/* Set Bonus Display */
+#set-bonus-display {
+    margin-bottom: 16px;
+    padding: 10px;
+    background: rgba(0, 0, 0, 0.3);
+    border-radius: 4px;
+}
+
+.no-bonus {
+    color: #555;
+    font-size: 11px;
+    font-style: italic;
+}
+
+.set-bonus {
+    padding: 6px 10px;
+    margin-bottom: 4px;
+    border-radius: 4px;
+    font-size: 11px;
+}
+
+.set-bonus.vitae {
+    background: rgba(0, 255, 170, 0.1);
+    border-left: 3px solid #00ffaa;
+    color: #00ffaa;
+}
+
+.set-bonus.ignis {
+    background: rgba(255, 153, 0, 0.1);
+    border-left: 3px solid #ff9900;
+    color: #ff9900;
+}
+
+.set-bonus.umbra {
+    background: rgba(153, 0, 255, 0.1);
+    border-left: 3px solid #9900ff;
+    color: #9900ff;
+}
+
+.bonus-name {
+    font-weight: bold;
+}
+
+.bonus-count {
+    color: #888;
+    font-size: 10px;
+    margin-left: 6px;
+}
+
+/* Biomass Display */
+#biomass-display {
+    text-align: center;
+    padding: 10px;
+    background: rgba(0, 0, 0, 0.3);
+    border-radius: 4px;
+    margin-bottom: 16px;
+    color: #ff6699;
+    font-size: 14px;
+}
+
+.biomass-icon {
+    font-size: 18px;
+    margin-right: 6px;
+}
+
+/* Equipped tool brood colors */
+.equipped-tool.vitae {
+    color: #00ffaa;
+    border: 1px solid #00aa77;
+}
+
+.equipped-tool.ignis {
+    color: #ff9900;
+    border: 1px solid #cc6600;
+}
+
+.equipped-tool.umbra {
+    color: #cc66ff;
+    border: 1px solid #9900ff;
+}
+
+/* Bio-Forge Panel */
+#bioforge-panel {
+    min-width: 600px;
+}
+
+.forge-description {
+    color: #888;
+    font-size: 12px;
+    text-align: center;
+    margin-bottom: 20px;
+    padding: 10px;
+    background: rgba(0, 0, 0, 0.3);
+    border-radius: 4px;
+}
+
+.forge-inputs {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 16px;
+    margin-bottom: 20px;
+}
+
+.forge-slot {
+    text-align: center;
+}
+
+.forge-slot .slot-label {
+    font-size: 10px;
+    color: #666;
+    text-transform: uppercase;
+    margin-bottom: 8px;
+}
+
+.forge-slot select {
+    background: #1a1a1a;
+    border: 2px solid #3a3a3a;
+    border-radius: 4px;
+    color: #ccc;
+    padding: 10px 15px;
+    font-size: 12px;
+    cursor: pointer;
+    min-width: 150px;
+}
+
+.forge-slot select:hover {
+    border-color: #5a5a5a;
+}
+
+.forge-slot select:focus {
+    border-color: #00ffaa;
+    outline: none;
+}
+
+.forge-plus {
+    font-size: 24px;
+    color: #555;
+    font-weight: bold;
+}
+
+#forge-preview {
+    background: #1a1a1a;
+    border: 2px solid #3a3a3a;
+    border-radius: 6px;
+    padding: 16px;
+    text-align: center;
+    margin-bottom: 20px;
+}
+
+.preview-label {
+    font-size: 10px;
+    color: #666;
+    text-transform: uppercase;
+    margin-bottom: 10px;
+}
+
+#forge-result {
+    color: #888;
+    font-size: 13px;
+}
+
+.preview-tool {
+    padding: 10px;
+    border-radius: 4px;
+}
+
+.preview-tool.vitae {
+    background: rgba(0, 255, 170, 0.1);
+    color: #00ffaa;
+}
+
+.preview-tool.ignis {
+    background: rgba(255, 153, 0, 0.1);
+    color: #ff9900;
+}
+
+.preview-tool.umbra {
+    background: rgba(153, 0, 255, 0.1);
+    color: #cc66ff;
+}
+
+#forge-cost {
+    text-align: center;
+    font-size: 11px;
+    color: #888;
+    margin-bottom: 16px;
+}
+
+.forge-btn {
+    display: block;
+    width: 100%;
+    padding: 14px;
+    background: linear-gradient(180deg, #00aa77 0%, #008866 100%);
+    border: none;
+    border-radius: 6px;
+    color: white;
+    font-size: 16px;
+    font-weight: bold;
+    cursor: pointer;
+    transition: all 0.2s;
+    text-transform: uppercase;
+    letter-spacing: 2px;
+}
+
+.forge-btn:hover:not(:disabled) {
+    background: linear-gradient(180deg, #00cc88 0%, #00aa77 100%);
+    box-shadow: 0 0 20px rgba(0, 255, 170, 0.3);
+}
+
+.forge-btn:disabled {
+    background: #2a2a2a;
+    color: #555;
+    cursor: not-allowed;
+}
