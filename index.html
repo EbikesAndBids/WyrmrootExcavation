@@ -3,17 +3,26 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Wyrmroot Excavation</title>
+    <title>Wyrmroot: Deep Excavation</title>
     <link rel="stylesheet" href="styles/main.css">
 </head>
 <body>
     <div id="game-container">
         <canvas id="game-canvas"></canvas>
         <div id="ui-overlay">
+            <!-- Top Resource Bar -->
             <div id="resource-bar">
                 <div class="resource" id="health-display">
-                    <span class="resource-icon">&#9829;</span>
+                    <span class="resource-icon health-icon">&#9829;</span>
                     <span class="resource-value">100</span>
+                </div>
+                <div class="resource" id="oxygen-display">
+                    <span class="resource-icon oxygen-icon">O2</span>
+                    <span class="resource-value">100</span>
+                </div>
+                <div class="resource" id="heat-display">
+                    <span class="resource-icon heat-icon">&#9832;</span>
+                    <span class="resource-value">0</span>
                 </div>
                 <div class="resource" id="sap-display">
                     <span class="resource-icon sap-icon"></span>
@@ -23,29 +32,143 @@
                     <span class="resource-label">Depth:</span>
                     <span class="resource-value">0m</span>
                 </div>
+                <div class="resource" id="money-display">
+                    <span class="resource-icon money-icon">$</span>
+                    <span class="resource-value">0</span>
+                </div>
             </div>
+
+            <!-- Minimap -->
             <div id="minimap-container">
                 <canvas id="minimap-canvas"></canvas>
+                <div id="biome-indicator">Surface</div>
             </div>
+
+            <!-- Tool Bar -->
             <div id="tool-bar">
-                <div class="tool-slot active" data-tool="drill">
+                <div class="tool-slot active" data-tool="drill" title="Drill (1)">
                     <span class="tool-key">1</span>
+                    <span class="tool-name">Drill</span>
                 </div>
-                <div class="tool-slot" data-tool="sonar">
+                <div class="tool-slot" data-tool="sonar" title="Sonar (2)">
                     <span class="tool-key">2</span>
+                    <span class="tool-name">Sonar</span>
                 </div>
-                <div class="tool-slot" data-tool="pipe">
+                <div class="tool-slot" data-tool="pipe" title="Pipe (3)">
                     <span class="tool-key">3</span>
+                    <span class="tool-name">Pipe</span>
+                    <span class="tool-count" id="pipe-count">5</span>
                 </div>
-                <div class="tool-slot" data-tool="extractor">
+                <div class="tool-slot" data-tool="turret" title="Turret (4)">
                     <span class="tool-key">4</span>
+                    <span class="tool-name">Turret</span>
+                    <span class="tool-count" id="turret-count">2</span>
                 </div>
             </div>
+
+            <!-- Recall Button -->
+            <div id="recall-container">
+                <div id="recall-button" title="Return to Surface (H)">
+                    <span class="recall-icon">&#8679;</span>
+                    <span class="recall-text">RECALL [H]</span>
+                </div>
+                <div id="recall-cooldown"></div>
+            </div>
+
+            <!-- Message Log -->
             <div id="message-log"></div>
+
+            <!-- Controls Help -->
+            <div id="controls-help">
+                <span>[I] Inventory</span>
+                <span>[Q] Equipment</span>
+                <span>[H] Recall</span>
+                <span>[O] Place O2</span>
+            </div>
         </div>
+
+        <!-- Inventory Panel -->
+        <div id="inventory-panel" class="ui-panel hidden">
+            <div class="panel-header">
+                <h2>Inventory</h2>
+                <button class="close-btn" data-close="inventory">&times;</button>
+            </div>
+            <div class="panel-content">
+                <div class="inventory-section">
+                    <h3>Vitae Materials</h3>
+                    <div class="inventory-grid" id="vitae-inventory"></div>
+                </div>
+                <div class="inventory-section">
+                    <h3>Ignis Materials</h3>
+                    <div class="inventory-grid" id="ignis-inventory"></div>
+                </div>
+                <div class="inventory-section">
+                    <h3>Umbra Materials</h3>
+                    <div class="inventory-grid" id="umbra-inventory"></div>
+                </div>
+                <div class="inventory-section">
+                    <h3>Fossils</h3>
+                    <div class="inventory-grid" id="fossil-inventory"></div>
+                </div>
+                <div class="inventory-section">
+                    <h3>Materials</h3>
+                    <div class="inventory-grid" id="materials-inventory"></div>
+                </div>
+                <div class="inventory-section">
+                    <h3>Equipment</h3>
+                    <div class="inventory-grid" id="equipment-inventory"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Equipment Panel -->
+        <div id="equipment-panel" class="ui-panel hidden">
+            <div class="panel-header">
+                <h2>Living Tools</h2>
+                <button class="close-btn" data-close="equipment">&times;</button>
+            </div>
+            <div class="panel-content">
+                <div class="equipment-slots">
+                    <div class="equipment-slot" data-slot="excavator">
+                        <div class="slot-label">Excavator</div>
+                        <div class="slot-content" id="slot-excavator">
+                            <span class="empty-slot">Empty</span>
+                        </div>
+                        <div class="slot-description" id="desc-excavator">Equip a mining tool</div>
+                    </div>
+                    <div class="equipment-slot" data-slot="movement">
+                        <div class="slot-label">Movement</div>
+                        <div class="slot-content" id="slot-movement">
+                            <span class="empty-slot">Empty</span>
+                        </div>
+                        <div class="slot-description" id="desc-movement">Equip mobility gear</div>
+                    </div>
+                    <div class="equipment-slot" data-slot="vision">
+                        <div class="slot-label">Vision</div>
+                        <div class="slot-content" id="slot-vision">
+                            <span class="empty-slot">Empty</span>
+                        </div>
+                        <div class="slot-description" id="desc-vision">Equip sensing tool</div>
+                    </div>
+                    <div class="equipment-slot" data-slot="storage">
+                        <div class="slot-label">Storage</div>
+                        <div class="slot-content" id="slot-storage">
+                            <span class="empty-slot">Empty</span>
+                        </div>
+                        <div class="slot-description" id="desc-storage">Equip storage upgrade</div>
+                    </div>
+                </div>
+                <div class="available-tools">
+                    <h3>Available Tools</h3>
+                    <div class="tools-grid" id="available-tools-grid"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Loading Screen -->
         <div id="loading-screen">
             <div class="loading-content">
-                <h1>Wyrmroot Excavation</h1>
+                <h1>Wyrmroot: Deep Excavation</h1>
                 <p>Initializing dig site...</p>
                 <div class="loading-bar">
                     <div class="loading-fill"></div>

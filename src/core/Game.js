@@ -68,6 +68,17 @@ export class Game {
             }
         };
 
+        this.ui.onRecallClicked = () => {
+            this.handleRecall();
+        };
+
+        this.ui.onEquipTool = (toolId, category) => {
+            if (this.player) {
+                this.player.equipLivingTool(toolId);
+                this.ui.addMessage(`Equipped ${toolId.replace(/_/g, ' ')}`, 'discovery');
+            }
+        };
+
         // Mining feedback
         this.lastMinedTile = null;
 
@@ -171,13 +182,33 @@ export class Game {
     update(deltaTime) {
         // Handle pause
         if (input.isActionJustPressed('PAUSE')) {
-            this.paused = !this.paused;
+            // Close any open panels first
+            if (this.ui.isAnyPanelOpen()) {
+                this.ui.closeAllPanels();
+            } else {
+                this.paused = !this.paused;
+            }
             return;
         }
 
-        // Handle inventory
+        // Handle inventory toggle
         if (input.isActionJustPressed('INVENTORY')) {
-            this.ui.showInventory(this.player);
+            this.ui.toggleInventory(this.player);
+        }
+
+        // Handle equipment toggle
+        if (input.isActionJustPressed('EQUIPMENT')) {
+            this.ui.toggleEquipment(this.player);
+        }
+
+        // Handle recall
+        if (input.isActionJustPressed('RECALL')) {
+            this.handleRecall();
+        }
+
+        // Skip game updates if panel is open
+        if (this.ui.isAnyPanelOpen()) {
+            return;
         }
 
         // Ensure chunks are generated around player
@@ -206,9 +237,30 @@ export class Game {
         this.ui.updateStats(this.player);
         this.ui.updateToolSelection(this.player.currentTool);
         this.ui.updateSonarCooldown(this.player.sonarCooldown);
+        this.ui.updateRecallCooldown(this.player.recallCooldown, this.player.recallMaxCooldown);
+
+        // Update biome indicator
+        const biome = this.player.getCurrentBiome();
+        this.ui.updateBiome(biome);
 
         // Update biome-specific UI
         this.updateBiomeUI();
+    }
+
+    /**
+     * Handle recall to surface
+     */
+    handleRecall() {
+        if (!this.player) return;
+
+        if (this.player.canRecall()) {
+            this.player.recall();
+            this.ui.addMessage('Recalled to surface!', 'discovery');
+            this.camera.shake(5, 200);
+        } else {
+            const remaining = Math.ceil(this.player.recallCooldown / 1000);
+            this.ui.addMessage(`Recall on cooldown: ${remaining}s`, 'warning');
+        }
     }
 
     /**

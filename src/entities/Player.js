@@ -112,6 +112,15 @@ export class Player {
 
         // Status effects
         this.effects = [];
+
+        // Recall system
+        this.recallCooldown = 0;
+        this.recallMaxCooldown = 30000; // 30 seconds
+        this.spawnX = x;
+        this.spawnY = y;
+
+        // Oxygen station interaction
+        this.nearOxygenStation = false;
     }
 
     /**
@@ -135,6 +144,49 @@ export class Player {
         this.updateSonar(deltaTime, world);
         this.updateEffects(deltaTime);
         this.updateAnimation(deltaTime);
+        this.updateRecallCooldown(deltaTime);
+    }
+
+    /**
+     * Update recall cooldown
+     */
+    updateRecallCooldown(deltaTime) {
+        if (this.recallCooldown > 0) {
+            this.recallCooldown = Math.max(0, this.recallCooldown - deltaTime);
+        }
+    }
+
+    /**
+     * Recall player to spawn point (surface)
+     */
+    recall() {
+        if (this.recallCooldown > 0) {
+            return false; // Still on cooldown
+        }
+
+        // Teleport to spawn
+        this.x = this.spawnX;
+        this.y = this.spawnY;
+        this.vx = 0;
+        this.vy = 0;
+
+        // Start cooldown
+        this.recallCooldown = this.recallMaxCooldown;
+
+        // Refill oxygen at surface
+        this.oxygen = this.maxOxygen;
+
+        // Cool down
+        this.heat = 0;
+
+        return true;
+    }
+
+    /**
+     * Check if recall is available
+     */
+    canRecall() {
+        return this.recallCooldown <= 0;
     }
 
     /**
@@ -154,21 +206,27 @@ export class Player {
 
         // Oxygen drain when underground
         if (depth > BIOMES.SURFACE.maxDepth) {
-            let oxygenDrain = PLAYER.OXYGEN_DRAIN_RATE;
+            // Check for oxygen station refill
+            if (this.nearOxygenStation) {
+                // Refill oxygen when near a station
+                this.oxygen = Math.min(this.maxOxygen, this.oxygen + 0.2 * deltaTime);
+            } else {
+                let oxygenDrain = PLAYER.OXYGEN_DRAIN_RATE;
 
-            // Drain faster in deeper biomes
-            if (biome.id === 'magma') oxygenDrain *= 1.5;
-            if (biome.id === 'abyss') oxygenDrain *= 2;
+                // Drain faster in deeper biomes
+                if (biome.id === 'magma') oxygenDrain *= 1.5;
+                if (biome.id === 'abyss') oxygenDrain *= 2;
 
-            // Drain faster in toxic gas
-            if (this.inGas) oxygenDrain *= 3;
+                // Drain faster in toxic gas
+                if (this.inGas) oxygenDrain *= 3;
 
-            this.oxygen -= oxygenDrain * deltaTime;
+                this.oxygen -= oxygenDrain * deltaTime;
 
-            // Suffocation damage
-            if (this.oxygen <= 0) {
-                this.oxygen = 0;
-                this.takeDamage(0.1 * deltaTime); // Slow suffocation
+                // Suffocation damage
+                if (this.oxygen <= 0) {
+                    this.oxygen = 0;
+                    this.takeDamage(0.1 * deltaTime); // Slow suffocation
+                }
             }
         } else {
             // Recover oxygen at surface
@@ -213,6 +271,9 @@ export class Player {
         const tileX = Math.floor((this.x + this.width / 2) / TILE_SIZE);
         const tileY = Math.floor((this.y + this.height / 2) / TILE_SIZE);
 
+        // Reset oxygen station detection
+        this.nearOxygenStation = false;
+
         // Check tiles in a 3x3 around player
         for (let dy = -1; dy <= 1; dy++) {
             for (let dx = -1; dx <= 1; dx++) {
@@ -223,6 +284,11 @@ export class Player {
                     if (props.hot) this.nearHeat = true;
                     if (props.fluid && (dx === 0 && dy === 0)) this.inFluid = tile;
                     if (props.gas && (dx === 0 && dy === 0)) this.inGas = true;
+                }
+
+                // Check for oxygen station
+                if (tile === TILE_TYPES.OXYGEN_STATION) {
+                    this.nearOxygenStation = true;
                 }
             }
         }
@@ -347,6 +413,11 @@ export class Player {
         // Extractor placement (R key)
         if (input.isActionJustPressed('PLACE_EXTRACTOR')) {
             this.handleExtractorPlacement(world);
+        }
+
+        // Oxygen station placement (O key)
+        if (input.isActionJustPressed('PLACE_OXYGEN')) {
+            this.handleOxygenStationPlacement(world);
         }
     }
 
@@ -544,6 +615,26 @@ export class Player {
                 this.inventory.extractor--;
             }
         }
+    }
+
+    /**
+     * Handle oxygen station placement
+     */
+    handleOxygenStationPlacement(world) {
+        if (this.inventory.oxygen_station > 0) {
+            const mouseWorld = input.getMouseWorldPosition();
+            const targetTileX = Math.floor(mouseWorld.x / TILE_SIZE);
+            const targetTileY = Math.floor(mouseWorld.y / TILE_SIZE);
+
+            // Check if tile is air and has floor beneath
+            if (world.getTile(targetTileX, targetTileY) === TILE_TYPES.AIR &&
+                world.isSolid(targetTileX, targetTileY + 1)) {
+                world.setTile(targetTileX, targetTileY, TILE_TYPES.OXYGEN_STATION);
+                this.inventory.oxygen_station--;
+                return true;
+            }
+        }
+        return false;
     }
 
     /**

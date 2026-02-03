@@ -416,6 +416,9 @@ export const KEYS = {
     PAUSE: ['Escape'],
     PLACE_TURRET: ['KeyT'],
     PLACE_EXTRACTOR: ['KeyR'],
+    PLACE_OXYGEN: ['KeyO'],
+    RECALL: ['KeyH'],
+    EQUIPMENT: ['KeyQ'],
 };
 
 // Game states
