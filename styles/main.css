@@ -549,6 +549,24 @@ body {
     cursor: not-allowed;
 }
 
+.tool-card.equipped {
+    border-color: #00aa77;
+    background: #1a2a1a;
+    cursor: default;
+}
+
+.tool-card.vitae {
+    border-left: 3px solid #00ffaa;
+}
+
+.tool-card.ignis {
+    border-left: 3px solid #ff9900;
+}
+
+.tool-card.umbra {
+    border-left: 3px solid #9900ff;
+}
+
 .tool-card-name {
     color: #ccc;
     font-size: 12px;

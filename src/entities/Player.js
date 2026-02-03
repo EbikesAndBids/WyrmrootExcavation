@@ -65,6 +65,9 @@ export class Player {
         // Artifacts collected
         this.artifacts = [];
 
+        // Crafted tools inventory (tools must be crafted before equipping)
+        this.craftedTools = [];
+
         // Artifact effects
         this.permanentRevealRadius = 0;
         this.machineSpeedMultiplier = 1;
@@ -829,11 +832,43 @@ export class Player {
     }
 
     /**
-     * Equip a living tool
+     * Add a crafted tool to inventory
+     */
+    addCraftedTool(tool) {
+        if (!tool || !tool.id) return false;
+
+        // Check if already has this tool
+        const existing = this.craftedTools.find(t => t.id === tool.id);
+        if (existing) return false;
+
+        this.craftedTools.push(tool);
+        return true;
+    }
+
+    /**
+     * Check if player has crafted a specific tool
+     */
+    hasCraftedTool(toolId) {
+        return this.craftedTools.some(t => t.id === toolId);
+    }
+
+    /**
+     * Get crafted tool by ID
+     */
+    getCraftedTool(toolId) {
+        return this.craftedTools.find(t => t.id === toolId);
+    }
+
+    /**
+     * Equip a living tool (must be crafted first)
      */
     equipLivingTool(toolId) {
-        const toolData = LIVING_TOOLS[toolId.toUpperCase()];
-        if (!toolData) return false;
+        // Find the tool in crafted inventory
+        const craftedTool = this.getCraftedTool(toolId);
+        if (!craftedTool) {
+            console.warn(`Cannot equip ${toolId}: not crafted yet`);
+            return false;
+        }
 
         // Map category to slot
         const categoryToSlot = {
@@ -848,9 +883,9 @@ export class Player {
             storage: 'backpack',
         };
 
-        const slot = categoryToSlot[toolData.category];
+        const slot = categoryToSlot[craftedTool.category];
         if (slot && this.livingTools.hasOwnProperty(slot)) {
-            this.livingTools[slot] = toolData;
+            this.livingTools[slot] = craftedTool;
             this.calculateSetBonuses();
             return true;
         }

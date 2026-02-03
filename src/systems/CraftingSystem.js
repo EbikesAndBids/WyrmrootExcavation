@@ -104,6 +104,9 @@ export class CraftingSystem {
         // Create tool instance
         const tool = this.createToolInstance(toolTemplate, catalystRarity);
 
+        // Add to player's crafted tools inventory
+        player.addCraftedTool(tool);
+
         return { success: true, tool };
     }
 

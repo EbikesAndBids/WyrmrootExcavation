@@ -666,43 +666,58 @@ export class UIManager {
     }
 
     /**
-     * Render available tools that can be equipped
+     * Render available tools that can be equipped (only shows crafted tools)
      */
     renderAvailableTools(player) {
         if (!this.elements.availableToolsGrid) return;
 
-        // Get all living tools
-        const tools = Object.values(LIVING_TOOLS);
+        // Only show crafted tools - players must craft before equipping
+        const craftedTools = player.craftedTools || [];
 
-        const html = tools.map(tool => {
-            const isEquipped = Object.values(player.livingTools).includes(tool.id);
-            const canCraft = this.canCraftTool(tool, player);
+        if (craftedTools.length === 0) {
+            this.elements.availableToolsGrid.innerHTML = `
+                <div style="color: #666; font-size: 11px; padding: 16px; text-align: center;">
+                    No tools crafted yet.<br>
+                    Use the Bio-Forge [B] to craft living tools.
+                </div>
+            `;
+            return;
+        }
+
+        const html = craftedTools.map(tool => {
+            // Check if this tool is currently equipped
+            const equippedTools = Object.values(player.livingTools);
+            const isEquipped = equippedTools.some(t => t && t.id === tool.id);
+            const broodClass = tool.brood || '';
 
             return `
-                <div class="tool-card ${!canCraft && !isEquipped ? 'locked' : ''}"
+                <div class="tool-card ${broodClass} ${isEquipped ? 'equipped' : ''}"
                      data-tool-id="${tool.id}"
                      data-category="${tool.category}">
                     <div class="tool-card-name">${tool.name}${isEquipped ? ' (Equipped)' : ''}</div>
                     <div class="tool-card-category">${tool.category} - Tier ${tool.tier}</div>
                     <div class="tool-card-desc">${tool.description}</div>
-                    ${!canCraft && !isEquipped ? '<div style="color: #ff4444; font-size: 9px; margin-top: 4px;">Missing materials</div>' : ''}
                 </div>
             `;
         }).join('');
 
         this.elements.availableToolsGrid.innerHTML = html;
 
-        // Add click handlers
-        this.elements.availableToolsGrid.querySelectorAll('.tool-card').forEach(card => {
-            card.addEventListener('click', () => {
+        // Use event delegation on the grid itself (set up once)
+        // Remove old handler and add new one to prevent accumulation
+        if (!this.toolGridHandlerAttached) {
+            this.elements.availableToolsGrid.addEventListener('click', (e) => {
+                const card = e.target.closest('.tool-card');
+                if (!card || card.classList.contains('equipped')) return;
+
                 const toolId = card.dataset.toolId;
-                const category = card.dataset.category;
-                if (!card.classList.contains('locked')) {
-                    this.onEquipTool(toolId, category);
-                    this.renderEquipment(player);
+                if (toolId && this.currentPlayer) {
+                    this.onEquipTool(toolId, card.dataset.category);
+                    this.renderEquipment(this.currentPlayer);
                 }
             });
-        });
+            this.toolGridHandlerAttached = true;
+        }
     }
 
     /**
