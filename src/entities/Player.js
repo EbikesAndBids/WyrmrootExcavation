@@ -162,6 +162,7 @@ export class Player {
      * Update player
      */
     update(deltaTime, world) {
+        this.applyEquipmentEffects(deltaTime, world);
         this.handleInput(world);
         this.applyPhysics(deltaTime, world);
         this.updateSurvival(deltaTime, world);
@@ -169,6 +170,102 @@ export class Player {
         this.updateEffects(deltaTime);
         this.updateAnimation(deltaTime);
         this.updateRecallCooldown(deltaTime);
+    }
+
+    /**
+     * Apply effects from all equipped living tools
+     */
+    applyEquipmentEffects(deltaTime, world) {
+        // Reset per-frame bonuses
+        this.equipmentHealthBonus = 0;
+        this.equipmentHeatResist = 0;
+        this.equipmentOxygenEfficiency = 1;
+        this.equipmentDamageReduction = 0;
+        this.equipmentCapacityBonus = 0;
+        this.equipmentStealthBonus = 0;
+        this.hasLavaImmunity = false;
+        this.hasGrapple = false;
+        this.hasJetBoost = false;
+        this.grappleRange = 0;
+        this.jetBoostPower = 0;
+
+        // Process each equipped tool
+        for (const [slot, tool] of Object.entries(this.livingTools)) {
+            if (!tool) continue;
+
+            // === SUIT EFFECTS ===
+            if (tool.healthBonus) {
+                this.equipmentHealthBonus += tool.healthBonus;
+            }
+            if (tool.healthRegen && deltaTime) {
+                this.heal(tool.healthRegen * deltaTime * 0.01);
+            }
+            if (tool.heatResistance) {
+                this.equipmentHeatResist += tool.heatResistance / 100;
+            }
+            if (tool.lavaImmunity) {
+                this.hasLavaImmunity = true;
+            }
+            if (tool.oxygenEfficiency) {
+                this.equipmentOxygenEfficiency *= tool.oxygenEfficiency;
+            }
+            if (tool.damageReduction) {
+                this.equipmentDamageReduction += tool.damageReduction;
+            }
+            if (tool.stealthBonus) {
+                this.equipmentStealthBonus += tool.stealthBonus;
+            }
+
+            // === BACKPACK EFFECTS ===
+            if (tool.capacityBonus) {
+                this.equipmentCapacityBonus += tool.capacityBonus;
+            }
+            if (tool.autoTurret && this.autoTurretCooldown <= 0) {
+                // Auto-turret will fire at nearby enemies (handled in combat system)
+                this.autoTurretActive = true;
+                this.autoTurretDamage = tool.turretDamage || 5;
+            }
+
+            // === UTILITY EFFECTS ===
+            if (tool.grapple) {
+                this.hasGrapple = true;
+                this.grappleRange = Math.max(this.grappleRange, tool.grappleRange || 10);
+            }
+            if (tool.jetBoost) {
+                this.hasJetBoost = true;
+                this.jetBoostPower = Math.max(this.jetBoostPower, tool.boostPower || 1.5);
+            }
+            if (tool.freezeRadius) {
+                this.stasisFieldRadius = tool.freezeRadius;
+                this.stasisFieldDuration = tool.freezeDuration || 3000;
+            }
+
+            // === SCANNING EFFECTS ===
+            if (tool.revealOre || tool.revealRoots || tool.seeThrough) {
+                this.scannerActive = true;
+                this.scannerRange = Math.max(this.scannerRange || 0, tool.scanRange || tool.sightRange || 15);
+                if (tool.revealOre) this.revealOre = true;
+                if (tool.revealRoots) this.revealRoots = true;
+                if (tool.revealEnemies) this.revealEnemies = true;
+                if (tool.seeThrough) this.seeThroughWalls = true;
+            }
+        }
+
+        // Apply max health bonus
+        this.maxHealth = PLAYER.MAX_HEALTH + this.equipmentHealthBonus;
+
+        // Clamp current health to new max
+        if (this.health > this.maxHealth) {
+            this.health = this.maxHealth;
+        }
+
+        // Update heat resistance
+        this.heatResistance = Math.min(1, this.equipmentHeatResist);
+
+        // Update auto-turret cooldown
+        if (this.autoTurretCooldown > 0) {
+            this.autoTurretCooldown -= deltaTime;
+        }
     }
 
     /**
@@ -244,6 +341,9 @@ export class Player {
                 // Drain faster in toxic gas
                 if (this.inGas) oxygenDrain *= 3;
 
+                // Apply equipment oxygen efficiency (e.g., Void Suit reduces drain by 50%)
+                oxygenDrain *= (this.equipmentOxygenEfficiency || 1);
+
                 this.oxygen -= oxygenDrain * deltaTime;
 
                 // Suffocation damage
@@ -267,12 +367,15 @@ export class Player {
             // Direct contact with lava or hot tiles
             if (this.inFluid === TILE_TYPES.LAVA) heatGain *= 5;
 
+            // Apply heat resistance from equipment
+            heatGain *= (1 - (this.heatResistance || 0));
+
             this.heat += heatGain * deltaTime;
 
             // Overheat damage
             if (this.heat >= this.maxHeat) {
                 this.heat = this.maxHeat;
-                this.takeDamage(0.2 * deltaTime);
+                this.takeDamage(0.2 * deltaTime * (1 - (this.equipmentDamageReduction || 0)));
             }
         } else {
             // Cool down
@@ -281,14 +384,14 @@ export class Player {
 
         // Fluid damage
         if (this.inFluid) {
-            // Check for lava immunity from Ignis set bonus
-            if (this.inFluid === TILE_TYPES.LAVA && this.lavaImmunity) {
+            // Check for lava immunity from equipment or set bonus
+            if (this.inFluid === TILE_TYPES.LAVA && (this.hasLavaImmunity || this.lavaImmunity)) {
                 // No damage, refill drill fuel instead
                 this.drillFuel = (this.drillFuel || 100);
             } else {
                 const props = TILE_PROPERTIES[this.inFluid];
                 if (props && props.damage > 0) {
-                    const damageReduction = this.heatResistance || 0;
+                    const damageReduction = Math.min(1, (this.heatResistance || 0) + (this.equipmentDamageReduction || 0));
                     this.takeDamage(props.damage * 0.01 * deltaTime * (1 - damageReduction));
                 }
             }
@@ -297,6 +400,12 @@ export class Player {
         // Health regen from Vitae set bonus (near light sources)
         if (this.hasSetBonus('healthRegen') && this.nearGlowingTile) {
             this.heal(0.05 * deltaTime);
+        }
+
+        // Health regen from Photosynthesis Plating (near light sources)
+        const suit = this.livingTools.suit;
+        if (suit && suit.regenNearLight && this.nearGlowingTile) {
+            this.heal(0.03 * deltaTime);
         }
 
         // Heat to speed bonus from Ignis set
@@ -344,6 +453,7 @@ export class Player {
      * Update status effects
      */
     updateEffects(deltaTime) {
+        // Update status effects
         for (let i = this.effects.length - 1; i >= 0; i--) {
             const effect = this.effects[i];
             effect.duration -= deltaTime;
@@ -351,6 +461,20 @@ export class Player {
             if (effect.duration <= 0) {
                 this.effects.splice(i, 1);
             }
+        }
+
+        // Update phase timer (from Phase-Shift Armor)
+        if (this.isPhased) {
+            this.phaseTimer -= deltaTime;
+            if (this.phaseTimer <= 0) {
+                this.isPhased = false;
+                this.phaseTimer = 0;
+            }
+        }
+
+        // Update phase cooldown
+        if (this.phaseCooldown > 0) {
+            this.phaseCooldown -= deltaTime;
         }
     }
 
@@ -381,11 +505,12 @@ export class Player {
     handleInput(world) {
         const horizontal = input.getHorizontal();
 
-        // Check for living tool movement abilities
-        const movementTool = this.livingTools.movement;
-        const canWallClimb = movementTool && LIVING_TOOLS[movementTool.toUpperCase()]?.wallClimb;
-        const canDoubleJump = movementTool && LIVING_TOOLS[movementTool.toUpperCase()]?.doubleJump;
-        const canGlide = movementTool && LIVING_TOOLS[movementTool.toUpperCase()]?.glide;
+        // Check for living tool movement abilities (from utility slot or legacy movement slot)
+        const utilityTool = this.livingTools.utility;
+        const movementTool = this.livingTools.movement; // Legacy slot
+        const canWallClimb = (utilityTool?.wallClimb) || (movementTool?.wallClimb);
+        const canDoubleJump = (utilityTool?.doubleJump) || (movementTool?.doubleJump);
+        const canGlide = (utilityTool?.glide) || (movementTool?.glide);
 
         // Horizontal movement
         if (horizontal !== 0) {
@@ -432,6 +557,46 @@ export class Player {
             this.vy = Math.min(this.vy, 2); // Slow fall
         } else {
             this.isGliding = false;
+        }
+
+        // Grapple (Vine Grapple) - use E key when utility grapple is equipped
+        if (this.hasGrapple && input.isActionJustPressed('SONAR')) {
+            const mouseWorld = input.getMouseWorldPosition();
+            const targetX = mouseWorld.x;
+            const targetY = mouseWorld.y;
+            const dx = targetX - (this.x + this.width / 2);
+            const dy = targetY - (this.y + this.height / 2);
+            const distance = Math.sqrt(dx * dx + dy * dy);
+
+            if (distance <= this.grappleRange * TILE_SIZE) {
+                // Pull player toward target
+                const pullSpeed = 8;
+                this.vx = (dx / distance) * pullSpeed;
+                this.vy = (dy / distance) * pullSpeed;
+            }
+        }
+
+        // Jet boost (Flame Jets) - double-tap horizontal for dash
+        if (this.hasJetBoost && this.jetBoostCooldown <= 0) {
+            if (input.isActionJustPressed('MOVE_LEFT') || input.isActionJustPressed('MOVE_RIGHT')) {
+                const now = Date.now();
+                const direction = input.isActionJustPressed('MOVE_LEFT') ? -1 : 1;
+
+                if (this.lastDashDirection === direction && now - this.lastDashTime < 300) {
+                    // Double-tap detected - perform dash
+                    this.vx = direction * PLAYER.SPEED * this.jetBoostPower * 3;
+                    this.jetBoostCooldown = 1000; // 1 second cooldown
+                    this.lastDashTime = 0;
+                } else {
+                    this.lastDashDirection = direction;
+                    this.lastDashTime = now;
+                }
+            }
+        }
+
+        // Update jet boost cooldown
+        if (this.jetBoostCooldown > 0) {
+            this.jetBoostCooldown -= 16; // Approximate frame time
         }
 
         // Reset double jump when grounded
@@ -528,10 +693,38 @@ export class Player {
 
             // Complete drilling
             if (this.drillProgress >= 1) {
-                const drop = world.mineTile(targetTileX, targetTileY, effectivePower);
-                if (drop) {
-                    this.collectDrop(drop);
+                // Check for AoE mining (Core Burner)
+                const mineAoE = excavatorTool && excavatorTool.aoeMinning;
+                const mineRadius = mineAoE ? 1 : 0; // 3x3 area
+
+                let totalMined = 0;
+                for (let dy = -mineRadius; dy <= mineRadius; dy++) {
+                    for (let dx = -mineRadius; dx <= mineRadius; dx++) {
+                        const tx = targetTileX + dx;
+                        const ty = targetTileY + dy;
+                        const drop = world.mineTile(tx, ty, effectivePower);
+                        if (drop) {
+                            this.collectDrop(drop);
+                            totalMined++;
+
+                            // Check for heal-on-mine (Root Singer) - organic tiles
+                            const minedTile = world.getTile(tx, ty);
+                            const minedProps = TILE_PROPERTIES[minedTile];
+                            if (excavatorTool && excavatorTool.healOnMine) {
+                                // Heal when mining root tiles
+                                if (props.rootType || drop.includes('sap') || drop.includes('plasma') || drop.includes('ichor')) {
+                                    this.heal(2);
+                                }
+                            }
+                        }
+                    }
                 }
+
+                // Generate heat for Inferno Jet
+                if (excavatorTool && excavatorTool.heatGeneration) {
+                    this.heat = Math.min(this.maxHeat, this.heat + excavatorTool.heatGeneration);
+                }
+
                 this.drillProgress = 0;
                 this.isDrilling = false;
 
@@ -687,9 +880,13 @@ export class Player {
      * Collect dropped items
      */
     collectDrop(dropType) {
-        if (this.inventory.hasOwnProperty(dropType)) {
-            this.inventory[dropType]++;
+        if (!dropType) return;
+
+        // Initialize if not exists, then increment
+        if (!this.inventory.hasOwnProperty(dropType)) {
+            this.inventory[dropType] = 0;
         }
+        this.inventory[dropType]++;
     }
 
     /**
@@ -806,7 +1003,25 @@ export class Player {
      * Take damage
      */
     takeDamage(amount) {
-        this.health = Math.max(0, this.health - amount);
+        // Check for phase-on-damage effect (Phase-Shift Armor)
+        if (this.isPhased) {
+            return false; // Immune while phased
+        }
+
+        // Apply equipment damage reduction
+        const reduction = Math.min(0.9, this.equipmentDamageReduction || 0);
+        const finalDamage = amount * (1 - reduction);
+
+        this.health = Math.max(0, this.health - finalDamage);
+
+        // Trigger phase-on-damage if equipped
+        const suit = this.livingTools.suit;
+        if (suit && suit.phaseOnDamage && !this.phaseCooldown) {
+            this.isPhased = true;
+            this.phaseTimer = suit.phaseDuration || 2000;
+            this.phaseCooldown = (suit.phaseDuration || 2000) * 2; // Cooldown is 2x duration
+        }
+
         return this.health <= 0;
     }
 
