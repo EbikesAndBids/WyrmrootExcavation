@@ -89,7 +89,12 @@ class InputManager {
             this.mouse.buttonsJustPressed.add(button);
         }
         this.mouse.buttons.set(button, true);
-        e.preventDefault();
+
+        // Only prevent default on canvas clicks, not UI elements
+        // This allows drag-and-drop to work on inventory items
+        if (e.target === this.canvas || e.target.id === 'game-canvas') {
+            e.preventDefault();
+        }
     }
 
     handleMouseUp(e) {
