@@ -25,6 +25,37 @@ export class World {
 
         // Extraction network
         this.pipelines = [];
+
+        // Storage crate contents (key: "x,y", value: inventory object)
+        this.storageContents = new Map();
+    }
+
+    /**
+     * Get storage contents at a position
+     */
+    getStorageAt(x, y) {
+        const key = `${x},${y}`;
+        if (!this.storageContents.has(key)) {
+            // Initialize empty storage with 20 slots
+            this.storageContents.set(key, {});
+        }
+        return this.storageContents.get(key);
+    }
+
+    /**
+     * Set storage contents at a position
+     */
+    setStorageAt(x, y, contents) {
+        const key = `${x},${y}`;
+        this.storageContents.set(key, contents);
+    }
+
+    /**
+     * Remove storage at a position (when crate is mined)
+     */
+    removeStorageAt(x, y) {
+        const key = `${x},${y}`;
+        this.storageContents.delete(key);
     }
 
     /**

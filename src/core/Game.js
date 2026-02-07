@@ -131,6 +131,13 @@ export class Game {
         // Pass crafting system to UI
         this.ui.craftingSystem = this.crafting;
 
+        // Storage change callback
+        this.ui.onStorageChanged = (pos, contents) => {
+            if (pos) {
+                this.world.setStorageAt(pos.x, pos.y, contents);
+            }
+        };
+
         // Mining feedback
         this.lastMinedTile = null;
 
@@ -268,6 +275,17 @@ export class Game {
         // Handle recall
         if (input.isActionJustPressed('RECALL')) {
             this.handleRecall();
+        }
+
+        // Handle interaction (F key) for storage crates
+        if (input.isActionJustPressed('INTERACT')) {
+            if (this.player.handleInteraction(this.world)) {
+                const interaction = this.player.interactingWith;
+                if (interaction && interaction.type === 'storage') {
+                    const storageContents = this.world.getStorageAt(interaction.x, interaction.y);
+                    this.ui.showStorage(this.player, storageContents, { x: interaction.x, y: interaction.y });
+                }
+            }
         }
 
         // Skip game updates if panel is open

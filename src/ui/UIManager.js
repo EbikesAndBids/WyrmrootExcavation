@@ -79,6 +79,14 @@ export class UIManager {
             craftButton: document.getElementById('craft-button'),
             // Dragon materials (new combined section)
             dragonInventory: document.getElementById('dragon-inventory'),
+            // Storage panel
+            storagePanel: document.getElementById('storage-panel'),
+            storagePlayerInv: document.getElementById('storage-player-inv'),
+            storageCrateInv: document.getElementById('storage-crate-inv'),
+            transferToStorage: document.getElementById('transfer-to-storage'),
+            transferToPlayer: document.getElementById('transfer-to-player'),
+            transferAllToStorage: document.getElementById('transfer-all-to-storage'),
+            transferAllToPlayer: document.getElementById('transfer-all-to-player'),
         };
 
         // Bio-Forge state
@@ -111,6 +119,13 @@ export class UIManager {
         // Drag and drop state
         this.draggedItem = null;
 
+        // Storage state
+        this.storageOpen = false;
+        this.currentStorage = null;
+        this.currentStoragePos = null;
+        this.selectedPlayerItem = null;
+        this.selectedStorageItem = null;
+
         // Message queue
         this.messages = [];
         this.maxMessages = 5;
@@ -134,6 +149,7 @@ export class UIManager {
         this.setupInventoryTabs();
         this.setupCraftingUI();
         this.setupHotbarDragDrop();
+        this.setupStoragePanel();
     }
 
     /**
@@ -158,6 +174,8 @@ export class UIManager {
                     this.hideEquipment();
                 } else if (panelType === 'bioforge') {
                     this.hideBioForge();
+                } else if (panelType === 'storage') {
+                    this.hideStorage();
                 }
             });
         });
@@ -537,6 +555,13 @@ export class UIManager {
             const nameEl = slot.querySelector('.tool-name');
             const countEl = slot.querySelector('.tool-count');
 
+            // Always update active state
+            if (index === this.selectedHotbarSlot) {
+                slot.classList.add('active');
+            } else {
+                slot.classList.remove('active');
+            }
+
             if (!item) {
                 // Empty slot
                 slot.classList.add('empty');
@@ -548,18 +573,26 @@ export class UIManager {
                 // Built-in tool (drill, sonar)
                 slot.classList.remove('empty');
                 slot.setAttribute('data-tool', item.id);
+                if (iconEl) {
+                    // Add tool icon
+                    if (item.id === 'drill') {
+                        iconEl.innerHTML = '⛏';
+                    } else if (item.id === 'sonar') {
+                        iconEl.innerHTML = '◎';
+                    }
+                }
                 if (nameEl) nameEl.textContent = item.id.charAt(0).toUpperCase() + item.id.slice(1);
+                if (countEl) countEl.textContent = '';
             } else if (item.type === 'item') {
                 // Inventory item
                 slot.classList.remove('empty');
                 slot.removeAttribute('data-tool');
 
-                const itemDef = ITEMS[item.id];
                 const color = this.getItemColor(item.id);
                 const count = this.currentPlayer?.inventory[item.id] || 0;
 
                 if (iconEl) {
-                    iconEl.innerHTML = `<div class="item-icon-small" style="background: ${color}"></div>`;
+                    iconEl.innerHTML = `<div class="item-icon-small" style="background: ${color}; width: 24px; height: 24px; border-radius: 4px;"></div>`;
                 }
                 if (nameEl) {
                     nameEl.textContent = this.formatItemName(item.id).substring(0, 8);
@@ -587,6 +620,207 @@ export class UIManager {
             data: this.hotbar[this.selectedHotbarSlot]
         };
     }
+
+    // ============ STORAGE SYSTEM ============
+
+    /**
+     * Setup storage panel
+     */
+    setupStoragePanel() {
+        // Transfer buttons
+        if (this.elements.transferToStorage) {
+            this.elements.transferToStorage.addEventListener('click', () => {
+                this.transferItem('toStorage');
+            });
+        }
+        if (this.elements.transferToPlayer) {
+            this.elements.transferToPlayer.addEventListener('click', () => {
+                this.transferItem('toPlayer');
+            });
+        }
+        if (this.elements.transferAllToStorage) {
+            this.elements.transferAllToStorage.addEventListener('click', () => {
+                this.transferAllItems('toStorage');
+            });
+        }
+        if (this.elements.transferAllToPlayer) {
+            this.elements.transferAllToPlayer.addEventListener('click', () => {
+                this.transferAllItems('toPlayer');
+            });
+        }
+    }
+
+    /**
+     * Show storage panel
+     */
+    showStorage(player, storageContents, storagePos) {
+        if (!this.elements.storagePanel) return;
+
+        this.currentPlayer = player;
+        this.currentStorage = storageContents;
+        this.currentStoragePos = storagePos;
+        this.storageOpen = true;
+        this.selectedPlayerItem = null;
+        this.selectedStorageItem = null;
+
+        this.elements.storagePanel.classList.remove('hidden');
+        this.renderStorageInventories();
+    }
+
+    /**
+     * Hide storage panel
+     */
+    hideStorage() {
+        if (this.elements.storagePanel) {
+            this.elements.storagePanel.classList.add('hidden');
+        }
+        this.storageOpen = false;
+        this.currentStorage = null;
+        this.currentStoragePos = null;
+    }
+
+    /**
+     * Toggle storage panel
+     */
+    toggleStorage(player, storageContents, storagePos) {
+        if (this.storageOpen) {
+            this.hideStorage();
+        } else {
+            this.showStorage(player, storageContents, storagePos);
+        }
+    }
+
+    /**
+     * Render both inventories in storage panel
+     */
+    renderStorageInventories() {
+        this.renderStoragePlayerInventory();
+        this.renderStorageCrateInventory();
+    }
+
+    /**
+     * Render player inventory in storage panel
+     */
+    renderStoragePlayerInventory() {
+        if (!this.elements.storagePlayerInv || !this.currentPlayer) return;
+
+        const inventory = this.currentPlayer.inventory;
+        const items = Object.entries(inventory)
+            .filter(([key, count]) => count > 0)
+            .map(([key, count]) => ({ key, count }));
+
+        const html = items.map(item => {
+            const color = this.getItemColor(item.key);
+            const isSelected = this.selectedPlayerItem === item.key;
+            return `
+                <div class="storage-item ${isSelected ? 'selected' : ''}" data-item="${item.key}" data-source="player">
+                    <div class="item-icon" style="background: ${color}"></div>
+                    <div class="item-name">${this.formatItemName(item.key).substring(0, 8)}</div>
+                    <div class="item-count">${item.count}</div>
+                </div>
+            `;
+        }).join('');
+
+        this.elements.storagePlayerInv.innerHTML = html || '<div style="color: #555; padding: 20px; text-align: center;">Empty</div>';
+
+        // Add click handlers
+        this.elements.storagePlayerInv.querySelectorAll('.storage-item').forEach(el => {
+            el.addEventListener('click', () => {
+                this.selectedPlayerItem = el.dataset.item;
+                this.selectedStorageItem = null;
+                this.renderStorageInventories();
+            });
+        });
+    }
+
+    /**
+     * Render storage crate inventory
+     */
+    renderStorageCrateInventory() {
+        if (!this.elements.storageCrateInv || !this.currentStorage) return;
+
+        const items = Object.entries(this.currentStorage)
+            .filter(([key, count]) => count > 0)
+            .map(([key, count]) => ({ key, count }));
+
+        const html = items.map(item => {
+            const color = this.getItemColor(item.key);
+            const isSelected = this.selectedStorageItem === item.key;
+            return `
+                <div class="storage-item ${isSelected ? 'selected' : ''}" data-item="${item.key}" data-source="storage">
+                    <div class="item-icon" style="background: ${color}"></div>
+                    <div class="item-name">${this.formatItemName(item.key).substring(0, 8)}</div>
+                    <div class="item-count">${item.count}</div>
+                </div>
+            `;
+        }).join('');
+
+        this.elements.storageCrateInv.innerHTML = html || '<div style="color: #555; padding: 20px; text-align: center;">Empty</div>';
+
+        // Add click handlers
+        this.elements.storageCrateInv.querySelectorAll('.storage-item').forEach(el => {
+            el.addEventListener('click', () => {
+                this.selectedStorageItem = el.dataset.item;
+                this.selectedPlayerItem = null;
+                this.renderStorageInventories();
+            });
+        });
+    }
+
+    /**
+     * Transfer a single item
+     */
+    transferItem(direction) {
+        if (direction === 'toStorage' && this.selectedPlayerItem) {
+            const item = this.selectedPlayerItem;
+            if (this.currentPlayer.inventory[item] > 0) {
+                this.currentPlayer.inventory[item]--;
+                this.currentStorage[item] = (this.currentStorage[item] || 0) + 1;
+                if (this.currentPlayer.inventory[item] <= 0) {
+                    this.selectedPlayerItem = null;
+                }
+            }
+        } else if (direction === 'toPlayer' && this.selectedStorageItem) {
+            const item = this.selectedStorageItem;
+            if (this.currentStorage[item] > 0) {
+                this.currentStorage[item]--;
+                this.currentPlayer.inventory[item] = (this.currentPlayer.inventory[item] || 0) + 1;
+                if (this.currentStorage[item] <= 0) {
+                    this.selectedStorageItem = null;
+                }
+            }
+        }
+        this.renderStorageInventories();
+        this.onStorageChanged(this.currentStoragePos, this.currentStorage);
+    }
+
+    /**
+     * Transfer all of selected item
+     */
+    transferAllItems(direction) {
+        if (direction === 'toStorage' && this.selectedPlayerItem) {
+            const item = this.selectedPlayerItem;
+            const count = this.currentPlayer.inventory[item] || 0;
+            if (count > 0) {
+                this.currentStorage[item] = (this.currentStorage[item] || 0) + count;
+                this.currentPlayer.inventory[item] = 0;
+                this.selectedPlayerItem = null;
+            }
+        } else if (direction === 'toPlayer' && this.selectedStorageItem) {
+            const item = this.selectedStorageItem;
+            const count = this.currentStorage[item] || 0;
+            if (count > 0) {
+                this.currentPlayer.inventory[item] = (this.currentPlayer.inventory[item] || 0) + count;
+                this.currentStorage[item] = 0;
+                this.selectedStorageItem = null;
+            }
+        }
+        this.renderStorageInventories();
+        this.onStorageChanged(this.currentStoragePos, this.currentStorage);
+    }
+
+    // Callback for when storage contents change
+    onStorageChanged(pos, contents) {}
 
     /**
      * Get item color for display
@@ -1392,7 +1626,7 @@ export class UIManager {
      * Check if any panel is open
      */
     isAnyPanelOpen() {
-        return this.inventoryOpen || this.equipmentOpen || this.bioforgeOpen;
+        return this.inventoryOpen || this.equipmentOpen || this.bioforgeOpen || this.storageOpen;
     }
 
     /**
@@ -1402,6 +1636,7 @@ export class UIManager {
         this.hideInventory();
         this.hideEquipment();
         this.hideBioForge();
+        this.hideStorage();
     }
 
     /**

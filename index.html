@@ -305,6 +305,33 @@
             </div>
         </div>
 
+        <!-- Storage Panel -->
+        <div id="storage-panel" class="ui-panel hidden">
+            <div class="panel-header">
+                <h2>Storage Crate</h2>
+                <button class="close-btn" data-close="storage">&times;</button>
+            </div>
+            <div class="panel-content">
+                <div class="storage-layout">
+                    <div class="storage-section">
+                        <h3>Your Inventory</h3>
+                        <div class="storage-grid" id="storage-player-inv"></div>
+                    </div>
+                    <div class="storage-controls">
+                        <button class="storage-btn" id="transfer-to-storage">→</button>
+                        <button class="storage-btn" id="transfer-to-player">←</button>
+                        <button class="storage-btn" id="transfer-all-to-storage">⇒</button>
+                        <button class="storage-btn" id="transfer-all-to-player">⇐</button>
+                    </div>
+                    <div class="storage-section">
+                        <h3>Storage (20 slots)</h3>
+                        <div class="storage-grid" id="storage-crate-inv"></div>
+                    </div>
+                </div>
+                <div class="storage-hint">Click items to select, then use arrows to transfer</div>
+            </div>
+        </div>
+
         <!-- Loading Screen -->
         <div id="loading-screen">
             <div class="loading-content">

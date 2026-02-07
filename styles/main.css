@@ -1296,3 +1296,119 @@ body {
     text-overflow: ellipsis;
     white-space: nowrap;
 }
+
+/* ============ STORAGE PANEL ============ */
+#storage-panel {
+    min-width: 600px;
+}
+
+.storage-layout {
+    display: flex;
+    gap: 16px;
+    align-items: flex-start;
+}
+
+.storage-section {
+    flex: 1;
+}
+
+.storage-section h3 {
+    margin: 0 0 10px 0;
+    font-size: 12px;
+    color: #888;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}
+
+.storage-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 6px;
+    max-height: 300px;
+    overflow-y: auto;
+    padding: 8px;
+    background: rgba(0, 0, 0, 0.3);
+    border-radius: 4px;
+}
+
+.storage-item {
+    width: 50px;
+    height: 50px;
+    background: #1a1a1a;
+    border: 2px solid #3a3a3a;
+    border-radius: 4px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    position: relative;
+    transition: all 0.2s;
+}
+
+.storage-item:hover {
+    border-color: #5a5a5a;
+    background: #222;
+}
+
+.storage-item.selected {
+    border-color: #00ffaa;
+    box-shadow: 0 0 8px rgba(0, 255, 170, 0.3);
+}
+
+.storage-item .item-icon {
+    width: 24px;
+    height: 24px;
+    border-radius: 4px;
+}
+
+.storage-item .item-count {
+    position: absolute;
+    bottom: 2px;
+    right: 4px;
+    font-size: 10px;
+    color: #aaa;
+    font-weight: bold;
+}
+
+.storage-item .item-name {
+    font-size: 8px;
+    color: #666;
+    margin-top: 2px;
+    max-width: 46px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.storage-controls {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 20px 8px;
+}
+
+.storage-btn {
+    width: 40px;
+    height: 32px;
+    background: #2a2a2a;
+    border: 1px solid #4a4a4a;
+    border-radius: 4px;
+    color: #888;
+    font-size: 16px;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.storage-btn:hover {
+    background: #3a3a3a;
+    border-color: #00ffaa;
+    color: #00ffaa;
+}
+
+.storage-hint {
+    margin-top: 16px;
+    text-align: center;
+    font-size: 11px;
+    color: #555;
+}

@@ -1147,6 +1147,7 @@ export const KEYS = {
     EQUIPMENT: ['KeyQ'],
     BIOFORGE: ['KeyB'],
     CYCLE_PLACEABLE: ['KeyC'], // Cycle through placeable blocks
+    INTERACT: ['KeyF'], // Interact with storage, machines, etc.
 };
 
 // Item definitions with stack limits and properties

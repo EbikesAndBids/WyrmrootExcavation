@@ -167,6 +167,9 @@ export class Player {
 
         // Oxygen station interaction
         this.nearOxygenStation = false;
+
+        // Interaction state (storage crates, machines, etc.)
+        this.interactingWith = null;
     }
 
     /**
@@ -671,11 +674,14 @@ export class Player {
         } else if (this.currentTool === TOOLS.TURRET) {
             this.handleTurretPlacement(world);
         } else if (this.currentTool === 'BUILD') {
-            this.handleBlockPlacement(world);
+            // Block placement requires a click (left or right mouse button)
+            if (input.isActionPressed('DRILL') || input.isActionPressed('PLACE_BLOCK')) {
+                this.handleBlockPlacement(world);
+            }
         }
 
-        // Right-click block placement (works regardless of current tool)
-        if (input.isActionJustPressed('PLACE_BLOCK')) {
+        // Right-click block placement (works regardless of current tool, but only if item selected)
+        if (input.isActionJustPressed('PLACE_BLOCK') && this.selectedPlaceableItem) {
             this.handleBlockPlacement(world);
         }
 
@@ -688,6 +694,57 @@ export class Player {
         if (input.isActionJustPressed('PLACE_OXYGEN')) {
             this.handleOxygenStationPlacement(world);
         }
+
+        // Interact with storage/machines (F key)
+        if (input.isActionJustPressed('INTERACT')) {
+            this.handleInteraction(world);
+        }
+    }
+
+    /**
+     * Handle interaction with nearby objects (storage crates, machines, etc.)
+     */
+    handleInteraction(world) {
+        const playerTileX = Math.floor((this.x + this.width / 2) / TILE_SIZE);
+        const playerTileY = Math.floor((this.y + this.height / 2) / TILE_SIZE);
+
+        // Check tiles around player for interactable objects
+        for (let dy = -2; dy <= 2; dy++) {
+            for (let dx = -2; dx <= 2; dx++) {
+                const tx = playerTileX + dx;
+                const ty = playerTileY + dy;
+                const tile = world.getTile(tx, ty);
+                const props = TILE_PROPERTIES[tile];
+
+                if (props && props.storage) {
+                    // Found a storage crate!
+                    this.interactingWith = {
+                        type: 'storage',
+                        x: tx,
+                        y: ty,
+                        tile: tile
+                    };
+                    return true;
+                }
+            }
+        }
+
+        this.interactingWith = null;
+        return false;
+    }
+
+    /**
+     * Get the object player is interacting with
+     */
+    getInteraction() {
+        return this.interactingWith;
+    }
+
+    /**
+     * Clear interaction
+     */
+    clearInteraction() {
+        this.interactingWith = null;
     }
 
     /**
