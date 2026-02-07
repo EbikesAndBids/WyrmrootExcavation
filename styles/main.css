@@ -1204,6 +1204,12 @@ body {
     border-style: solid;
 }
 
+.tool-slot.empty.active {
+    border-color: #00ffaa;
+    border-style: solid;
+    box-shadow: 0 0 10px rgba(0, 255, 170, 0.3);
+}
+
 .slot-icon {
     font-size: 18px;
     color: #aaa;
