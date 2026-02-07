@@ -652,12 +652,8 @@ export class Player {
             this.effects = this.effects.filter(e => e.type !== 'double_jumped');
         }
 
-        // Tool selection
-        if (input.isActionJustPressed('TOOL_1')) this.currentTool = TOOLS.DRILL;
-        if (input.isActionJustPressed('TOOL_2')) this.currentTool = TOOLS.SONAR;
-        if (input.isActionJustPressed('TOOL_3')) this.currentTool = TOOLS.PIPE;
-        if (input.isActionJustPressed('TOOL_4')) this.currentTool = TOOLS.TURRET;
-        if (input.isActionJustPressed('TOOL_5')) this.currentTool = 'BUILD';
+        // Note: Tool selection via keys 1-9 is handled by Game.js through the hotbar system
+        // The onHotbarSelect callback sets currentTool and selectedPlaceableItem
 
         // Cycle through placeable items (C key)
         if (input.isActionJustPressed('CYCLE_PLACEABLE')) {
@@ -674,8 +670,8 @@ export class Player {
         } else if (this.currentTool === TOOLS.TURRET) {
             this.handleTurretPlacement(world);
         } else if (this.currentTool === 'BUILD') {
-            // Block placement requires a click (left or right mouse button)
-            if (input.isActionPressed('DRILL') || input.isActionPressed('PLACE_BLOCK')) {
+            // Block placement requires a NEW click (not held button)
+            if (input.isActionJustPressed('DRILL') || input.isActionJustPressed('PLACE_BLOCK')) {
                 this.handleBlockPlacement(world);
             }
         }
@@ -694,11 +690,7 @@ export class Player {
         if (input.isActionJustPressed('PLACE_OXYGEN')) {
             this.handleOxygenStationPlacement(world);
         }
-
-        // Interact with storage/machines (F key)
-        if (input.isActionJustPressed('INTERACT')) {
-            this.handleInteraction(world);
-        }
+        // Note: INTERACT (F key) is handled in Game.js to open the storage UI
     }
 
     /**
