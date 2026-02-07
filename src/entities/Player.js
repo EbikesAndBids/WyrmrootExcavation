@@ -717,27 +717,21 @@ export class Player {
     }
 
     /**
-     * Handle block placement
+     * Handle block placement (Minecraft-style: must have item selected in hotbar)
      */
     handleBlockPlacement(world) {
-        // Use the UI hotbar selected item first, then fall back to selectedPlaceable
-        const itemToPlace = this.selectedPlaceableItem || this.selectedPlaceable;
+        // Only place if we have a specific item selected from the hotbar
+        const placeItem = this.selectedPlaceableItem;
 
-        if (!itemToPlace) {
-            // Try to auto-select first placeable item
-            this.cyclePlaceableItem();
-            if (!this.selectedPlaceable) return;
+        if (!placeItem) {
+            // No item selected - do nothing (must drag item to hotbar first)
+            return;
         }
 
-        const placeItem = itemToPlace || this.selectedPlaceable;
-
-        // Check if we have the item
+        // Check if we have the item in inventory
         if ((this.inventory[placeItem] || 0) <= 0) {
-            if (this.selectedPlaceableItem) {
-                this.selectedPlaceableItem = null; // Clear the hotbar selection
-            } else {
-                this.cyclePlaceableItem(); // Try to find another placeable
-            }
+            // Ran out of this item
+            this.selectedPlaceableItem = null;
             return;
         }
 
@@ -783,14 +777,9 @@ export class Player {
         world.setTile(targetTileX, targetTileY, itemDef.tileType);
         this.inventory[placeItem]--;
 
-        // If we ran out, clear the selection
+        // If we ran out, clear the selection (player must select another item)
         if (this.inventory[placeItem] <= 0) {
-            if (this.selectedPlaceableItem === placeItem) {
-                this.selectedPlaceableItem = null;
-            }
-            if (this.selectedPlaceable === placeItem) {
-                this.cyclePlaceableItem();
-            }
+            this.selectedPlaceableItem = null;
         }
     }
 

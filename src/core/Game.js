@@ -103,10 +103,14 @@ export class Game {
                     this.player.currentTool = slotData.id;
                     this.player.selectedPlaceableItem = null;
                 } else if (slotData.type === 'item') {
-                    // Item selected - set it as the current placeable
-                    this.player.currentTool = 'place';
+                    // Item selected - set it as the current placeable (like Minecraft)
+                    this.player.currentTool = 'BUILD';
                     this.player.selectedPlaceableItem = slotData.id;
                 }
+            } else if (this.player) {
+                // Empty slot selected - can't place anything
+                this.player.currentTool = null;
+                this.player.selectedPlaceableItem = null;
             }
         };
 
