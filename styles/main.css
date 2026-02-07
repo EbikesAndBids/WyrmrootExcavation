@@ -945,3 +945,348 @@ body {
     color: #555;
     cursor: not-allowed;
 }
+
+/* ============ PANEL TABS ============ */
+.panel-tabs {
+    display: flex;
+    gap: 2px;
+    padding: 0 16px;
+    background: rgba(0, 0, 0, 0.3);
+    border-bottom: 1px solid #3a3a3a;
+}
+
+.tab-btn {
+    padding: 10px 20px;
+    background: transparent;
+    border: none;
+    color: #666;
+    font-size: 12px;
+    font-family: inherit;
+    cursor: pointer;
+    transition: all 0.2s;
+    border-bottom: 2px solid transparent;
+    margin-bottom: -1px;
+}
+
+.tab-btn:hover {
+    color: #888;
+    background: rgba(255, 255, 255, 0.05);
+}
+
+.tab-btn.active {
+    color: #00ffaa;
+    border-bottom-color: #00ffaa;
+    background: rgba(0, 255, 170, 0.1);
+}
+
+.tab-content {
+    display: none;
+}
+
+.tab-content.active {
+    display: block;
+}
+
+/* ============ INVENTORY CAPACITY ============ */
+.inventory-capacity {
+    display: flex;
+    justify-content: flex-end;
+    padding: 8px 0;
+    margin-bottom: 12px;
+    font-size: 11px;
+    color: #888;
+    border-bottom: 1px solid #2a2a2a;
+}
+
+.inventory-capacity span {
+    color: #aaa;
+}
+
+#inventory-slots-used {
+    color: #00ffaa;
+    font-weight: bold;
+}
+
+#inventory-slots-max {
+    color: #666;
+}
+
+.inventory-hint {
+    margin-top: 16px;
+    padding: 10px;
+    background: rgba(0, 0, 0, 0.3);
+    border-radius: 4px;
+    font-size: 10px;
+    color: #555;
+    text-align: center;
+}
+
+/* ============ CRAFTING UI ============ */
+.crafting-categories {
+    display: flex;
+    gap: 6px;
+    margin-bottom: 16px;
+    flex-wrap: wrap;
+}
+
+.craft-cat-btn {
+    padding: 8px 14px;
+    background: #1a1a1a;
+    border: 1px solid #3a3a3a;
+    border-radius: 4px;
+    color: #888;
+    font-size: 11px;
+    font-family: inherit;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.craft-cat-btn:hover {
+    border-color: #5a5a5a;
+    color: #aaa;
+}
+
+.craft-cat-btn.active {
+    background: rgba(0, 255, 170, 0.1);
+    border-color: #00ffaa;
+    color: #00ffaa;
+}
+
+.crafting-recipes {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+    gap: 8px;
+    max-height: 200px;
+    overflow-y: auto;
+    margin-bottom: 16px;
+    padding-right: 6px;
+}
+
+.recipe-card {
+    background: #1a1a1a;
+    border: 1px solid #3a3a3a;
+    border-radius: 4px;
+    padding: 10px;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.recipe-card:hover {
+    border-color: #5a5a5a;
+    background: #222;
+}
+
+.recipe-card.selected {
+    border-color: #00ffaa;
+    background: rgba(0, 255, 170, 0.1);
+}
+
+.recipe-card.unavailable {
+    opacity: 0.5;
+}
+
+.recipe-card-name {
+    font-size: 11px;
+    color: #ccc;
+    margin-bottom: 4px;
+}
+
+.recipe-card-cost {
+    font-size: 9px;
+    color: #666;
+}
+
+.crafting-info {
+    background: #1a1a1a;
+    border: 1px solid #3a3a3a;
+    border-radius: 6px;
+    padding: 16px;
+}
+
+#recipe-name {
+    font-size: 14px;
+    color: #00ffaa;
+    margin-bottom: 12px;
+    text-align: center;
+}
+
+.recipe-inputs,
+.recipe-outputs {
+    font-size: 11px;
+    color: #888;
+    margin-bottom: 8px;
+}
+
+.recipe-inputs strong,
+.recipe-outputs strong {
+    color: #aaa;
+}
+
+.craft-controls {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    margin: 16px 0;
+}
+
+.craft-amount-btn {
+    padding: 6px 10px;
+    background: #2a2a2a;
+    border: 1px solid #3a3a3a;
+    border-radius: 4px;
+    color: #888;
+    font-size: 11px;
+    font-family: inherit;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.craft-amount-btn:hover {
+    border-color: #5a5a5a;
+    color: #ccc;
+}
+
+.craft-amount {
+    min-width: 40px;
+    text-align: center;
+    font-size: 16px;
+    color: #ffcc00;
+    font-weight: bold;
+}
+
+.craft-btn {
+    display: block;
+    width: 100%;
+    padding: 12px;
+    background: linear-gradient(180deg, #00aa77 0%, #008866 100%);
+    border: none;
+    border-radius: 6px;
+    color: white;
+    font-size: 14px;
+    font-weight: bold;
+    cursor: pointer;
+    transition: all 0.2s;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}
+
+.craft-btn:hover:not(:disabled) {
+    background: linear-gradient(180deg, #00cc88 0%, #00aa77 100%);
+    box-shadow: 0 0 15px rgba(0, 255, 170, 0.3);
+}
+
+.craft-btn:disabled {
+    background: #2a2a2a;
+    color: #555;
+    cursor: not-allowed;
+}
+
+/* ============ ENHANCED TOOLBAR (9 slots) ============ */
+#tool-bar {
+    gap: 4px;
+    padding: 6px;
+}
+
+.tool-slot {
+    width: 48px;
+    height: 48px;
+    position: relative;
+}
+
+.tool-slot.empty {
+    background: #1a1a1a;
+    border-style: dashed;
+}
+
+.tool-slot.empty:hover {
+    border-color: #00ffaa;
+    border-style: solid;
+}
+
+.slot-icon {
+    font-size: 18px;
+    color: #aaa;
+}
+
+.tool-slot.empty .slot-icon {
+    color: #333;
+}
+
+/* Drag and drop styles */
+.tool-slot.drag-over {
+    border-color: #00ffaa !important;
+    background: rgba(0, 255, 170, 0.2) !important;
+    box-shadow: 0 0 10px rgba(0, 255, 170, 0.4);
+}
+
+.inventory-item.draggable {
+    cursor: grab;
+    user-select: none;
+}
+
+.inventory-item.draggable:hover {
+    border-color: #00ffaa;
+}
+
+.inventory-item.dragging {
+    opacity: 0.5;
+    cursor: grabbing;
+}
+
+/* Placeable items in inventory */
+.inventory-item.placeable {
+    position: relative;
+}
+
+.inventory-item.placeable::after {
+    content: 'P';
+    position: absolute;
+    top: 4px;
+    right: 4px;
+    font-size: 8px;
+    color: #00ffaa;
+    background: rgba(0, 0, 0, 0.5);
+    padding: 1px 3px;
+    border-radius: 2px;
+}
+
+/* Hotbar item indicator */
+.inventory-item.in-hotbar::before {
+    content: attr(data-hotbar-slot);
+    position: absolute;
+    bottom: 4px;
+    right: 4px;
+    font-size: 9px;
+    color: #ffcc00;
+    background: rgba(0, 0, 0, 0.7);
+    padding: 1px 4px;
+    border-radius: 2px;
+}
+
+/* Tool slot item display */
+.tool-slot .item-in-slot {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    height: 100%;
+}
+
+.tool-slot .item-icon-small {
+    width: 20px;
+    height: 20px;
+    border-radius: 3px;
+    margin-bottom: 2px;
+}
+
+.tool-slot .item-name-small {
+    font-size: 7px;
+    color: #888;
+    text-align: center;
+    max-width: 44px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}

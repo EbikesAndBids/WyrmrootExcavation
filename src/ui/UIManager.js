@@ -4,7 +4,7 @@
  * Full inventory, equipment, and recall systems
  */
 
-import { TOOLS, SONAR, BIOMES, LIVING_TOOLS, CHASSIS_TYPES, EQUIPMENT_SETS } from '../core/Constants.js';
+import { TOOLS, SONAR, BIOMES, LIVING_TOOLS, CHASSIS_TYPES, EQUIPMENT_SETS, ITEMS } from '../core/Constants.js';
 
 export class UIManager {
     constructor() {
@@ -64,6 +64,21 @@ export class UIManager {
             forgeResult: document.getElementById('forge-result'),
             forgeCost: document.getElementById('forge-cost'),
             forgeButton: document.getElementById('forge-button'),
+            // Inventory tabs and crafting
+            inventorySlotsUsed: document.getElementById('inventory-slots-used'),
+            inventorySlotsMax: document.getElementById('inventory-slots-max'),
+            tabButtons: document.querySelectorAll('.tab-btn'),
+            tabContents: document.querySelectorAll('.tab-content'),
+            craftingCategories: document.querySelectorAll('.craft-cat-btn'),
+            craftingRecipes: document.getElementById('crafting-recipes'),
+            recipeName: document.getElementById('recipe-name'),
+            recipeInputs: document.getElementById('recipe-inputs'),
+            recipeOutputs: document.getElementById('recipe-outputs'),
+            craftAmount: document.getElementById('craft-amount'),
+            craftAmountBtns: document.querySelectorAll('.craft-amount-btn'),
+            craftButton: document.getElementById('craft-button'),
+            // Dragon materials (new combined section)
+            dragonInventory: document.getElementById('dragon-inventory'),
         };
 
         // Bio-Forge state
@@ -79,6 +94,22 @@ export class UIManager {
         this.bioforgeOpen = false;
         this.currentPlayer = null;
         this.craftingSystem = null;
+
+        // Crafting UI state
+        this.selectedCraftCategory = 'building';
+        this.selectedRecipe = null;
+        this.craftAmount = 1;
+
+        // Hotbar state (slots 0-8 for keys 1-9)
+        this.hotbar = [
+            { type: 'tool', id: 'drill' },      // Slot 1 - Drill
+            { type: 'tool', id: 'sonar' },      // Slot 2 - Sonar
+            null, null, null, null, null, null, null  // Slots 3-9 - empty
+        ];
+        this.selectedHotbarSlot = 0;
+
+        // Drag and drop state
+        this.draggedItem = null;
 
         // Message queue
         this.messages = [];
@@ -100,6 +131,9 @@ export class UIManager {
         this.setupPanelCloseButtons();
         this.setupRecallButton();
         this.setupBioForge();
+        this.setupInventoryTabs();
+        this.setupCraftingUI();
+        this.setupHotbarDragDrop();
     }
 
     /**
@@ -148,6 +182,8 @@ export class UIManager {
     onRecallClicked() {}
     onEquipTool(toolId, slot) {}
     onCraft(chassisId, strainType, catalystRarity) {}
+    onHotbarSelect(slotIndex, slotData) {}
+    onCraftMaterial(recipeId, count) {}
 
     /**
      * Setup Bio-Forge UI with custom dropdowns
@@ -245,6 +281,346 @@ export class UIManager {
         document.querySelectorAll('.custom-dropdown.open').forEach(dd => {
             dd.classList.remove('open');
         });
+    }
+
+    /**
+     * Setup inventory tab switching
+     */
+    setupInventoryTabs() {
+        this.elements.tabButtons.forEach(btn => {
+            btn.addEventListener('click', () => {
+                const tabId = btn.dataset.tab;
+                this.switchTab(tabId);
+            });
+        });
+    }
+
+    /**
+     * Switch between inventory tabs
+     */
+    switchTab(tabId) {
+        // Update button states
+        this.elements.tabButtons.forEach(btn => {
+            btn.classList.toggle('active', btn.dataset.tab === tabId);
+        });
+
+        // Update content visibility
+        this.elements.tabContents.forEach(content => {
+            const contentId = content.id.replace('-tab', '');
+            content.classList.toggle('active', contentId === tabId);
+        });
+
+        // Refresh crafting UI if switching to crafting tab
+        if (tabId === 'crafting' && this.currentPlayer && this.craftingSystem) {
+            this.renderCraftingRecipes();
+        }
+    }
+
+    /**
+     * Setup crafting UI
+     */
+    setupCraftingUI() {
+        // Category buttons
+        this.elements.craftingCategories.forEach(btn => {
+            btn.addEventListener('click', () => {
+                this.selectedCraftCategory = btn.dataset.category;
+                this.elements.craftingCategories.forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+                this.renderCraftingRecipes();
+            });
+        });
+
+        // Amount buttons
+        this.elements.craftAmountBtns.forEach(btn => {
+            btn.addEventListener('click', () => {
+                const amount = btn.dataset.amount;
+                if (amount === 'max') {
+                    if (this.selectedRecipe && this.currentPlayer && this.craftingSystem) {
+                        this.craftAmount = this.craftingSystem.getMaxCraftable(this.currentPlayer, this.selectedRecipe);
+                    }
+                } else {
+                    this.craftAmount = Math.max(1, this.craftAmount + parseInt(amount));
+                }
+                this.updateCraftAmount();
+            });
+        });
+
+        // Craft button
+        if (this.elements.craftButton) {
+            this.elements.craftButton.addEventListener('click', () => {
+                if (this.selectedRecipe) {
+                    this.onCraftMaterial(this.selectedRecipe.id, this.craftAmount);
+                    // Refresh after crafting
+                    if (this.currentPlayer) {
+                        this.renderInventory(this.currentPlayer);
+                        this.renderCraftingRecipes();
+                    }
+                }
+            });
+        }
+    }
+
+    /**
+     * Render crafting recipes for current category
+     */
+    renderCraftingRecipes() {
+        if (!this.elements.craftingRecipes || !this.craftingSystem || !this.currentPlayer) return;
+
+        const recipes = this.craftingSystem.getMaterialRecipes(this.selectedCraftCategory);
+
+        const html = recipes.map(recipe => {
+            const canCraft = this.craftingSystem.canCraftMaterial(this.currentPlayer, recipe.id);
+            const costText = Object.entries(recipe.inputs)
+                .map(([item, count]) => `${count} ${this.formatItemName(item)}`)
+                .join(', ');
+
+            return `
+                <div class="recipe-card ${canCraft ? '' : 'unavailable'} ${this.selectedRecipe?.id === recipe.id ? 'selected' : ''}"
+                     data-recipe-id="${recipe.id}">
+                    <div class="recipe-card-name">${recipe.name}</div>
+                    <div class="recipe-card-cost">${costText}</div>
+                </div>
+            `;
+        }).join('');
+
+        this.elements.craftingRecipes.innerHTML = html || '<div style="color: #555; padding: 20px; text-align: center;">No recipes in this category</div>';
+
+        // Add click handlers
+        this.elements.craftingRecipes.querySelectorAll('.recipe-card').forEach(card => {
+            card.addEventListener('click', () => {
+                const recipeId = card.dataset.recipeId;
+                this.selectRecipe(recipeId);
+            });
+        });
+    }
+
+    /**
+     * Select a crafting recipe
+     */
+    selectRecipe(recipeId) {
+        if (!this.craftingSystem) return;
+
+        const recipe = this.craftingSystem.getMaterialRecipes().find(r => r.id === recipeId);
+        if (!recipe) return;
+
+        this.selectedRecipe = recipe;
+        this.craftAmount = 1;
+
+        // Update selected state in recipe cards
+        this.elements.craftingRecipes.querySelectorAll('.recipe-card').forEach(card => {
+            card.classList.toggle('selected', card.dataset.recipeId === recipeId);
+        });
+
+        // Update recipe info panel
+        if (this.elements.recipeName) {
+            this.elements.recipeName.textContent = recipe.name;
+        }
+
+        if (this.elements.recipeInputs) {
+            const inputsText = Object.entries(recipe.inputs)
+                .map(([item, count]) => {
+                    const have = this.currentPlayer?.inventory[item] || 0;
+                    const color = have >= count ? '#00ffaa' : '#ff6666';
+                    return `<span style="color: ${color}">${count} ${this.formatItemName(item)} (have: ${have})</span>`;
+                })
+                .join('<br>');
+            this.elements.recipeInputs.innerHTML = `<strong>Requires:</strong><br>${inputsText}`;
+        }
+
+        if (this.elements.recipeOutputs) {
+            const outputsText = Object.entries(recipe.outputs)
+                .map(([item, count]) => `${count} ${this.formatItemName(item)}`)
+                .join(', ');
+            this.elements.recipeOutputs.innerHTML = `<strong>Creates:</strong> ${outputsText}`;
+        }
+
+        this.updateCraftAmount();
+    }
+
+    /**
+     * Update craft amount display and button state
+     */
+    updateCraftAmount() {
+        if (this.elements.craftAmount) {
+            this.elements.craftAmount.textContent = this.craftAmount;
+        }
+
+        if (this.elements.craftButton && this.selectedRecipe && this.craftingSystem && this.currentPlayer) {
+            const canCraft = this.craftingSystem.canCraftMaterial(this.currentPlayer, this.selectedRecipe.id, this.craftAmount);
+            this.elements.craftButton.disabled = !canCraft;
+        }
+    }
+
+    /**
+     * Setup hotbar drag and drop
+     */
+    setupHotbarDragDrop() {
+        // Make tool slots accept drops
+        this.elements.toolSlots.forEach((slot, index) => {
+            // Click to select
+            slot.addEventListener('click', () => {
+                this.selectHotbarSlot(index);
+            });
+
+            // Drag over handling
+            slot.addEventListener('dragover', (e) => {
+                e.preventDefault();
+                if (index >= 2) { // Only slots 3-9 (index 2-8) are customizable
+                    slot.classList.add('drag-over');
+                }
+            });
+
+            slot.addEventListener('dragleave', () => {
+                slot.classList.remove('drag-over');
+            });
+
+            slot.addEventListener('drop', (e) => {
+                e.preventDefault();
+                slot.classList.remove('drag-over');
+
+                if (index >= 2 && this.draggedItem) {
+                    this.assignToHotbar(index, this.draggedItem);
+                    this.draggedItem = null;
+                    this.updateHotbarDisplay();
+                    if (this.currentPlayer) {
+                        this.renderInventory(this.currentPlayer);
+                    }
+                }
+            });
+        });
+    }
+
+    /**
+     * Select a hotbar slot
+     */
+    selectHotbarSlot(index) {
+        this.selectedHotbarSlot = index;
+
+        // Update visual selection
+        this.elements.toolSlots.forEach((slot, i) => {
+            slot.classList.toggle('active', i === index);
+        });
+
+        // Notify game of selection
+        const slotData = this.hotbar[index];
+        this.onHotbarSelect(index, slotData);
+    }
+
+    /**
+     * Assign an item to hotbar slot
+     */
+    assignToHotbar(slotIndex, item) {
+        // Remove item from any other hotbar slot first
+        for (let i = 2; i < this.hotbar.length; i++) {
+            if (this.hotbar[i]?.id === item.id && this.hotbar[i]?.type === item.type) {
+                this.hotbar[i] = null;
+            }
+        }
+
+        this.hotbar[slotIndex] = item;
+    }
+
+    /**
+     * Remove item from hotbar slot
+     */
+    removeFromHotbar(slotIndex) {
+        if (slotIndex >= 2) { // Can only remove from customizable slots
+            this.hotbar[slotIndex] = null;
+            this.updateHotbarDisplay();
+        }
+    }
+
+    /**
+     * Update hotbar visual display
+     */
+    updateHotbarDisplay() {
+        this.elements.toolSlots.forEach((slot, index) => {
+            const item = this.hotbar[index];
+            const iconEl = slot.querySelector('.slot-icon');
+            const nameEl = slot.querySelector('.tool-name');
+            const countEl = slot.querySelector('.tool-count');
+
+            if (!item) {
+                // Empty slot
+                slot.classList.add('empty');
+                slot.removeAttribute('data-tool');
+                if (iconEl) iconEl.innerHTML = '';
+                if (nameEl) nameEl.textContent = '';
+                if (countEl) countEl.textContent = '';
+            } else if (item.type === 'tool') {
+                // Built-in tool (drill, sonar)
+                slot.classList.remove('empty');
+                slot.setAttribute('data-tool', item.id);
+                if (nameEl) nameEl.textContent = item.id.charAt(0).toUpperCase() + item.id.slice(1);
+            } else if (item.type === 'item') {
+                // Inventory item
+                slot.classList.remove('empty');
+                slot.removeAttribute('data-tool');
+
+                const itemDef = ITEMS[item.id];
+                const color = this.getItemColor(item.id);
+                const count = this.currentPlayer?.inventory[item.id] || 0;
+
+                if (iconEl) {
+                    iconEl.innerHTML = `<div class="item-icon-small" style="background: ${color}"></div>`;
+                }
+                if (nameEl) {
+                    nameEl.textContent = this.formatItemName(item.id).substring(0, 8);
+                }
+                if (countEl) {
+                    countEl.textContent = count > 0 ? count : '';
+                }
+            }
+        });
+    }
+
+    /**
+     * Get hotbar data for use by game
+     */
+    getHotbar() {
+        return this.hotbar;
+    }
+
+    /**
+     * Get currently selected hotbar slot
+     */
+    getSelectedSlot() {
+        return {
+            index: this.selectedHotbarSlot,
+            data: this.hotbar[this.selectedHotbarSlot]
+        };
+    }
+
+    /**
+     * Get item color for display
+     */
+    getItemColor(itemId) {
+        const colorMap = {
+            'wood_plank': '#8b6914',
+            'ladder': '#9a7b2a',
+            'platform': '#7a6b5a',
+            'torch': '#ffd700',
+            'storage_crate': '#8b7355',
+            'reinforced_stone': '#5a5a6a',
+            'glass_pane': '#aaccee',
+            'pipe': '#707080',
+            'turret': '#668866',
+            'extractor': '#8844aa',
+            'oxygen_station': '#4488cc',
+            'dirt': '#3a2718',
+            'stone': '#4a4a4a',
+            'petrified_wood': '#5a4030',
+            'amber': '#d4a020',
+            'gravel': '#6a6a5a',
+            'volcanic_rock': '#3a2020',
+            'basalt': '#2a2a2a',
+            'obsidian': '#1a1a2a',
+            'void_stone': '#1a0a2a',
+            'crystal': '#8060c0',
+            'floating_rock': '#4a3a5a',
+            'shadow_glass': '#2a2040',
+        };
+        return colorMap[itemId] || '#666';
     }
 
     /**
@@ -571,13 +947,21 @@ export class UIManager {
     /**
      * Show inventory panel
      */
-    showInventory(player) {
+    showInventory(player, craftingSystem = null) {
         if (!this.elements.inventoryPanel) return;
 
         this.currentPlayer = player;
+        if (craftingSystem) {
+            this.craftingSystem = craftingSystem;
+        }
         this.inventoryOpen = true;
         this.elements.inventoryPanel.classList.remove('hidden');
         this.renderInventory(player);
+
+        // Initialize crafting UI if crafting system is available
+        if (this.craftingSystem) {
+            this.renderCraftingRecipes();
+        }
     }
 
     /**
@@ -605,26 +989,21 @@ export class UIManager {
      * Render full inventory
      */
     renderInventory(player) {
-        // Vitae materials
-        this.renderInventorySection(this.elements.vitaeInventory, [
+        // Update inventory capacity display
+        this.updateInventoryCapacity(player);
+
+        // Dragon Materials (all sap types combined)
+        this.renderInventorySection(this.elements.dragonInventory, [
             { key: 'vitae_sap_small', name: 'Vitae Sap (trace)', color: '#00aa77' },
             { key: 'vitae_sap', name: 'Vitae Sap', color: '#00ffaa' },
             { key: 'vitae_sap_pure', name: 'Pure Vitae Sap', color: '#00ffdd' },
-        ], player.inventory, 'vitae');
-
-        // Ignis materials
-        this.renderInventorySection(this.elements.ignisInventory, [
             { key: 'ignis_plasma_small', name: 'Ignis Plasma (trace)', color: '#cc6600' },
             { key: 'ignis_plasma', name: 'Ignis Plasma', color: '#ff9900' },
             { key: 'ignis_plasma_pure', name: 'Pure Ignis Plasma', color: '#ffcc00' },
-        ], player.inventory, 'ignis');
-
-        // Umbra materials
-        this.renderInventorySection(this.elements.umbraInventory, [
             { key: 'umbra_ichor_small', name: 'Umbra Ichor (trace)', color: '#6600aa' },
             { key: 'umbra_ichor', name: 'Umbra Ichor', color: '#9900ff' },
             { key: 'umbra_ichor_pure', name: 'Pure Umbra Ichor', color: '#cc66ff' },
-        ], player.inventory, 'umbra');
+        ], player.inventory, '');
 
         // Fossils
         this.renderInventorySection(this.elements.fossilInventory, [
@@ -635,30 +1014,62 @@ export class UIManager {
             { key: 'dragon_ribcage', name: 'Dragon Ribcage', color: '#c8c0a8' },
         ], player.inventory, 'fossil');
 
-        // Materials
+        // Building Materials (placeable items)
         this.renderInventorySection(this.elements.materialsInventory, [
-            { key: 'dirt', name: 'Dirt', color: '#3a2718' },
-            { key: 'stone', name: 'Stone', color: '#4a4a4a' },
-            { key: 'petrified_wood', name: 'Petrified Wood', color: '#5a4030' },
+            { key: 'wood_plank', name: 'Wood Plank', color: '#8b6914', placeable: true },
+            { key: 'ladder', name: 'Ladder', color: '#9a7b2a', placeable: true },
+            { key: 'platform', name: 'Platform', color: '#7a6b5a', placeable: true },
+            { key: 'torch', name: 'Torch', color: '#ffd700', placeable: true },
+            { key: 'reinforced_stone', name: 'Reinforced Stone', color: '#5a5a6a', placeable: true },
+            { key: 'glass_pane', name: 'Glass Pane', color: '#aaccee', placeable: true },
+            { key: 'storage_crate', name: 'Storage Crate', color: '#8b7355', placeable: true },
+            { key: 'dirt', name: 'Dirt', color: '#3a2718', placeable: true },
+            { key: 'stone', name: 'Stone', color: '#4a4a4a', placeable: true },
+            { key: 'petrified_wood', name: 'Petrified Wood', color: '#5a4030', placeable: true },
             { key: 'amber', name: 'Amber', color: '#d4a020' },
-            { key: 'gravel', name: 'Gravel', color: '#6a6a5a' },
-            { key: 'volcanic_rock', name: 'Volcanic Rock', color: '#3a2020' },
-            { key: 'basalt', name: 'Basalt', color: '#2a2a2a' },
-            { key: 'obsidian', name: 'Obsidian', color: '#1a1a2a' },
-            { key: 'ash', name: 'Volcanic Ash', color: '#5a5050' },
-            { key: 'void_stone', name: 'Void Stone', color: '#1a0a2a' },
-            { key: 'crystal', name: 'Crystal', color: '#8060c0' },
-            { key: 'floating_rock', name: 'Floating Rock', color: '#4a3a5a' },
-            { key: 'shadow_glass', name: 'Shadow Glass', color: '#2a2040' },
+            { key: 'gravel', name: 'Gravel', color: '#6a6a5a', placeable: true },
+            { key: 'volcanic_rock', name: 'Volcanic Rock', color: '#3a2020', placeable: true },
+            { key: 'basalt', name: 'Basalt', color: '#2a2a2a', placeable: true },
+            { key: 'obsidian', name: 'Obsidian', color: '#1a1a2a', placeable: true },
+            { key: 'ash', name: 'Volcanic Ash', color: '#5a5050', placeable: true },
+            { key: 'void_stone', name: 'Void Stone', color: '#1a0a2a', placeable: true },
+            { key: 'crystal', name: 'Crystal', color: '#8060c0', placeable: true },
+            { key: 'floating_rock', name: 'Floating Rock', color: '#4a3a5a', placeable: true },
+            { key: 'shadow_glass', name: 'Shadow Glass', color: '#2a2040', placeable: true },
         ], player.inventory, '');
 
-        // Equipment
+        // Equipment/Machines
         this.renderInventorySection(this.elements.equipmentInventory, [
-            { key: 'pipe', name: 'Pipe', color: '#707080' },
-            { key: 'extractor', name: 'Extractor', color: '#8844aa' },
-            { key: 'turret', name: 'Turret', color: '#668866' },
-            { key: 'oxygen_station', name: 'O2 Station', color: '#4488cc' },
+            { key: 'pipe', name: 'Pipe', color: '#707080', placeable: true },
+            { key: 'extractor', name: 'Extractor', color: '#8844aa', placeable: true },
+            { key: 'turret', name: 'Turret', color: '#668866', placeable: true },
+            { key: 'oxygen_station', name: 'O2 Station', color: '#4488cc', placeable: true },
         ], player.inventory, '');
+
+        // Update hotbar display
+        this.updateHotbarDisplay();
+    }
+
+    /**
+     * Update inventory capacity display
+     */
+    updateInventoryCapacity(player) {
+        if (!player) return;
+
+        // Count unique item stacks (simplified - each item type = 1 slot)
+        let usedSlots = 0;
+        for (const [item, count] of Object.entries(player.inventory)) {
+            if (count > 0) usedSlots++;
+        }
+
+        const maxSlots = player.getInventorySlots ? player.getInventorySlots() : 20;
+
+        if (this.elements.inventorySlotsUsed) {
+            this.elements.inventorySlotsUsed.textContent = usedSlots;
+        }
+        if (this.elements.inventorySlotsMax) {
+            this.elements.inventorySlotsMax.textContent = maxSlots;
+        }
     }
 
     /**
@@ -669,17 +1080,59 @@ export class UIManager {
 
         const html = items
             .filter(item => (inventory[item.key] || 0) > 0)
-            .map(item => `
-                <div class="inventory-item ${cssClass}">
-                    <div class="item-icon" style="background: ${item.color}"></div>
-                    <div class="item-info">
-                        <div class="item-name">${item.name}</div>
-                        <div class="item-count">${inventory[item.key] || 0}</div>
+            .map(item => {
+                const isPlaceable = item.placeable || ITEMS[item.key]?.placeable;
+                const hotbarSlot = this.getHotbarSlotForItem(item.key);
+                const classes = [
+                    'inventory-item',
+                    cssClass,
+                    isPlaceable ? 'placeable draggable' : '',
+                    hotbarSlot !== null ? 'in-hotbar' : ''
+                ].filter(Boolean).join(' ');
+
+                return `
+                    <div class="${classes}"
+                         data-item-id="${item.key}"
+                         ${isPlaceable ? 'draggable="true"' : ''}
+                         ${hotbarSlot !== null ? `data-hotbar-slot="${hotbarSlot + 1}"` : ''}>
+                        <div class="item-icon" style="background: ${item.color}"></div>
+                        <div class="item-info">
+                            <div class="item-name">${item.name}</div>
+                            <div class="item-count">${inventory[item.key] || 0}</div>
+                        </div>
                     </div>
-                </div>
-            `).join('');
+                `;
+            }).join('');
 
         container.innerHTML = html || '<div style="color: #444; font-size: 11px; padding: 8px;">Empty</div>';
+
+        // Setup drag handlers for draggable items
+        container.querySelectorAll('.inventory-item.draggable').forEach(el => {
+            el.addEventListener('dragstart', (e) => {
+                const itemId = el.dataset.itemId;
+                this.draggedItem = { type: 'item', id: itemId };
+                el.classList.add('dragging');
+                e.dataTransfer.effectAllowed = 'move';
+                e.dataTransfer.setData('text/plain', itemId);
+            });
+
+            el.addEventListener('dragend', () => {
+                el.classList.remove('dragging');
+                this.draggedItem = null;
+            });
+        });
+    }
+
+    /**
+     * Get hotbar slot index for an item (or null if not in hotbar)
+     */
+    getHotbarSlotForItem(itemId) {
+        for (let i = 2; i < this.hotbar.length; i++) {
+            if (this.hotbar[i]?.type === 'item' && this.hotbar[i]?.id === itemId) {
+                return i;
+            }
+        }
+        return null;
     }
 
     // ============ EQUIPMENT SYSTEM ============

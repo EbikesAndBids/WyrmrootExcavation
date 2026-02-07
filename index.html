@@ -44,25 +44,52 @@
                 <div id="biome-indicator">Surface</div>
             </div>
 
-            <!-- Tool Bar -->
+            <!-- Tool Bar - 9 slot hotbar -->
             <div id="tool-bar">
-                <div class="tool-slot active" data-tool="drill" title="Drill (1)">
+                <div class="tool-slot active" data-slot="0" data-tool="drill" title="Drill (1)">
                     <span class="tool-key">1</span>
+                    <div class="slot-icon">&#9935;</div>
                     <span class="tool-name">Drill</span>
                 </div>
-                <div class="tool-slot" data-tool="sonar" title="Sonar (2)">
+                <div class="tool-slot" data-slot="1" data-tool="sonar" title="Sonar (2)">
                     <span class="tool-key">2</span>
+                    <div class="slot-icon">&#9678;</div>
                     <span class="tool-name">Sonar</span>
                 </div>
-                <div class="tool-slot" data-tool="pipe" title="Pipe (3)">
+                <div class="tool-slot empty" data-slot="2" title="Empty (3)">
                     <span class="tool-key">3</span>
-                    <span class="tool-name">Pipe</span>
-                    <span class="tool-count" id="pipe-count">5</span>
+                    <div class="slot-icon"></div>
+                    <span class="tool-count"></span>
                 </div>
-                <div class="tool-slot" data-tool="turret" title="Turret (4)">
+                <div class="tool-slot empty" data-slot="3" title="Empty (4)">
                     <span class="tool-key">4</span>
-                    <span class="tool-name">Turret</span>
-                    <span class="tool-count" id="turret-count">2</span>
+                    <div class="slot-icon"></div>
+                    <span class="tool-count"></span>
+                </div>
+                <div class="tool-slot empty" data-slot="4" title="Empty (5)">
+                    <span class="tool-key">5</span>
+                    <div class="slot-icon"></div>
+                    <span class="tool-count"></span>
+                </div>
+                <div class="tool-slot empty" data-slot="5" title="Empty (6)">
+                    <span class="tool-key">6</span>
+                    <div class="slot-icon"></div>
+                    <span class="tool-count"></span>
+                </div>
+                <div class="tool-slot empty" data-slot="6" title="Empty (7)">
+                    <span class="tool-key">7</span>
+                    <div class="slot-icon"></div>
+                    <span class="tool-count"></span>
+                </div>
+                <div class="tool-slot empty" data-slot="7" title="Empty (8)">
+                    <span class="tool-key">8</span>
+                    <div class="slot-icon"></div>
+                    <span class="tool-count"></span>
+                </div>
+                <div class="tool-slot empty" data-slot="8" title="Empty (9)">
+                    <span class="tool-key">9</span>
+                    <div class="slot-icon"></div>
+                    <span class="tool-count"></span>
                 </div>
             </div>
 
@@ -80,11 +107,11 @@
 
             <!-- Controls Help -->
             <div id="controls-help">
-                <span>[I] Inventory</span>
+                <span>[1-9] Hotbar</span>
+                <span>[I] Inventory/Crafting</span>
                 <span>[Q] Equipment</span>
                 <span>[B] Bio-Forge</span>
-                <span>[H] Recall</span>
-                <span>[O] Place O2</span>
+                <span>[RMB] Place Block</span>
             </div>
         </div>
 
@@ -94,30 +121,59 @@
                 <h2>Inventory</h2>
                 <button class="close-btn" data-close="inventory">&times;</button>
             </div>
-            <div class="panel-content">
-                <div class="inventory-section">
-                    <h3>Vitae Materials</h3>
-                    <div class="inventory-grid" id="vitae-inventory"></div>
+            <!-- Tab Navigation -->
+            <div class="panel-tabs">
+                <button class="tab-btn active" data-tab="items">Items</button>
+                <button class="tab-btn" data-tab="crafting">Crafting</button>
+            </div>
+            <!-- Items Tab -->
+            <div class="panel-content tab-content active" id="items-tab">
+                <div class="inventory-capacity">
+                    <span>Slots: </span><span id="inventory-slots-used">0</span>/<span id="inventory-slots-max">20</span>
                 </div>
                 <div class="inventory-section">
-                    <h3>Ignis Materials</h3>
-                    <div class="inventory-grid" id="ignis-inventory"></div>
-                </div>
-                <div class="inventory-section">
-                    <h3>Umbra Materials</h3>
-                    <div class="inventory-grid" id="umbra-inventory"></div>
+                    <h3>Dragon Materials</h3>
+                    <div class="inventory-grid" id="dragon-inventory"></div>
                 </div>
                 <div class="inventory-section">
                     <h3>Fossils</h3>
                     <div class="inventory-grid" id="fossil-inventory"></div>
                 </div>
                 <div class="inventory-section">
-                    <h3>Materials</h3>
+                    <h3>Building Materials</h3>
                     <div class="inventory-grid" id="materials-inventory"></div>
                 </div>
                 <div class="inventory-section">
                     <h3>Equipment</h3>
                     <div class="inventory-grid" id="equipment-inventory"></div>
+                </div>
+                <div class="inventory-hint">
+                    <span>Drag items to hotbar slots 3-9 to quick-select for placement</span>
+                </div>
+            </div>
+            <!-- Crafting Tab -->
+            <div class="panel-content tab-content" id="crafting-tab">
+                <div class="crafting-categories">
+                    <button class="craft-cat-btn active" data-category="building">Building</button>
+                    <button class="craft-cat-btn" data-category="lighting">Lighting</button>
+                    <button class="craft-cat-btn" data-category="storage">Storage</button>
+                    <button class="craft-cat-btn" data-category="equipment">Equipment</button>
+                    <button class="craft-cat-btn" data-category="refining">Refining</button>
+                </div>
+                <div class="crafting-recipes" id="crafting-recipes"></div>
+                <div class="crafting-info" id="crafting-info">
+                    <div class="recipe-name" id="recipe-name">Select a recipe</div>
+                    <div class="recipe-inputs" id="recipe-inputs"></div>
+                    <div class="recipe-outputs" id="recipe-outputs"></div>
+                    <div class="craft-controls">
+                        <button class="craft-amount-btn" data-amount="-10">-10</button>
+                        <button class="craft-amount-btn" data-amount="-1">-1</button>
+                        <span class="craft-amount" id="craft-amount">1</span>
+                        <button class="craft-amount-btn" data-amount="1">+1</button>
+                        <button class="craft-amount-btn" data-amount="10">+10</button>
+                        <button class="craft-amount-btn" data-amount="max">MAX</button>
+                    </div>
+                    <button id="craft-button" class="craft-btn" disabled>CRAFT</button>
                 </div>
             </div>
         </div>

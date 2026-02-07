@@ -38,6 +38,7 @@ export class Player {
 
         // Block placement
         this.selectedPlaceable = null;
+        this.selectedPlaceableItem = null; // Set from UI hotbar
         this.placeableItems = []; // List of items that can be placed
 
         // Stats
@@ -719,15 +720,24 @@ export class Player {
      * Handle block placement
      */
     handleBlockPlacement(world) {
-        if (!this.selectedPlaceable) {
+        // Use the UI hotbar selected item first, then fall back to selectedPlaceable
+        const itemToPlace = this.selectedPlaceableItem || this.selectedPlaceable;
+
+        if (!itemToPlace) {
             // Try to auto-select first placeable item
             this.cyclePlaceableItem();
             if (!this.selectedPlaceable) return;
         }
 
+        const placeItem = itemToPlace || this.selectedPlaceable;
+
         // Check if we have the item
-        if ((this.inventory[this.selectedPlaceable] || 0) <= 0) {
-            this.cyclePlaceableItem(); // Try to find another placeable
+        if ((this.inventory[placeItem] || 0) <= 0) {
+            if (this.selectedPlaceableItem) {
+                this.selectedPlaceableItem = null; // Clear the hotbar selection
+            } else {
+                this.cyclePlaceableItem(); // Try to find another placeable
+            }
             return;
         }
 
@@ -766,17 +776,29 @@ export class Player {
         }
 
         // Get the tile type to place
-        const itemDef = ITEMS[this.selectedPlaceable];
+        const itemDef = ITEMS[placeItem];
         if (!itemDef || itemDef.tileType === undefined) return;
 
         // Place the block
         world.setTile(targetTileX, targetTileY, itemDef.tileType);
-        this.inventory[this.selectedPlaceable]--;
+        this.inventory[placeItem]--;
 
-        // If we ran out, cycle to next placeable
-        if (this.inventory[this.selectedPlaceable] <= 0) {
-            this.cyclePlaceableItem();
+        // If we ran out, clear the selection
+        if (this.inventory[placeItem] <= 0) {
+            if (this.selectedPlaceableItem === placeItem) {
+                this.selectedPlaceableItem = null;
+            }
+            if (this.selectedPlaceable === placeItem) {
+                this.cyclePlaceableItem();
+            }
         }
+    }
+
+    /**
+     * Get inventory slots total (used by UI)
+     */
+    getInventorySlots() {
+        return this.getMaxInventorySlots();
     }
 
     /**

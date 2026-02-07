@@ -97,6 +97,36 @@ export class Game {
             }
         };
 
+        this.ui.onHotbarSelect = (slotIndex, slotData) => {
+            if (this.player && slotData) {
+                if (slotData.type === 'tool') {
+                    this.player.currentTool = slotData.id;
+                    this.player.selectedPlaceableItem = null;
+                } else if (slotData.type === 'item') {
+                    // Item selected - set it as the current placeable
+                    this.player.currentTool = 'place';
+                    this.player.selectedPlaceableItem = slotData.id;
+                }
+            }
+        };
+
+        this.ui.onCraftMaterial = (recipeId, count) => {
+            if (this.player) {
+                const result = this.crafting.craftMaterial(this.player, recipeId, count);
+                if (result.success) {
+                    const outputText = Object.entries(result.crafted)
+                        .map(([item, amt]) => `${amt} ${item.replace(/_/g, ' ')}`)
+                        .join(', ');
+                    this.ui.addMessage(`Crafted: ${outputText}`, 'discovery');
+                } else {
+                    this.ui.addMessage(`Crafting failed: ${result.error}`, 'warning');
+                }
+            }
+        };
+
+        // Pass crafting system to UI
+        this.ui.craftingSystem = this.crafting;
+
         // Mining feedback
         this.lastMinedTile = null;
 
@@ -211,7 +241,14 @@ export class Game {
 
         // Handle inventory toggle
         if (input.isActionJustPressed('INVENTORY')) {
-            this.ui.toggleInventory(this.player);
+            this.ui.toggleInventory(this.player, this.crafting);
+        }
+
+        // Handle hotbar selection (keys 1-9)
+        for (let i = 1; i <= 9; i++) {
+            if (input.isActionJustPressed(`TOOL_${i}`)) {
+                this.ui.selectHotbarSlot(i - 1);
+            }
         }
 
         // Handle equipment toggle
