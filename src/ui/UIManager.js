@@ -138,14 +138,11 @@ export class UIManager {
 
     /**
      * Setup tool slot click handlers
+     * Note: Click handling is now done in setupHotbarDragDrop for unified hotbar management
      */
     setupToolSlots() {
-        this.elements.toolSlots.forEach(slot => {
-            slot.addEventListener('click', () => {
-                const tool = slot.dataset.tool;
-                this.onToolSelected(tool);
-            });
-        });
+        // Hotbar click handling moved to setupHotbarDragDrop
+        // This method is kept for compatibility but does nothing
     }
 
     /**

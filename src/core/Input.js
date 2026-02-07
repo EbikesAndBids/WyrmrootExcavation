@@ -84,17 +84,18 @@ class InputManager {
     }
 
     handleMouseDown(e) {
+        // Only register mouse clicks on the canvas, not UI elements
+        // This prevents clicking hotbar slots from triggering game actions
+        if (e.target !== this.canvas && e.target.id !== 'game-canvas') {
+            return;
+        }
+
         const button = `Mouse${e.button}`;
         if (!this.mouse.buttons.get(button)) {
             this.mouse.buttonsJustPressed.add(button);
         }
         this.mouse.buttons.set(button, true);
-
-        // Only prevent default on canvas clicks, not UI elements
-        // This allows drag-and-drop to work on inventory items
-        if (e.target === this.canvas || e.target.id === 'game-canvas') {
-            e.preventDefault();
-        }
+        e.preventDefault();
     }
 
     handleMouseUp(e) {
