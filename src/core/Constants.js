@@ -90,6 +90,15 @@ export const TILE_TYPES = {
     TURRET: 93,
     OXYGEN_STATION: 94,
 
+    // Building materials (craftable)
+    WOOD_PLANK: 110,
+    LADDER: 111,
+    PLATFORM: 112,
+    TORCH: 113,
+    STORAGE_CRATE: 114,
+    REINFORCED_STONE: 115,
+    GLASS_PANE: 116,
+
     // Bedrock
     BEDROCK: 100,
 };
@@ -165,6 +174,15 @@ export const TILE_PROPERTIES = {
     [TILE_TYPES.TURRET]: { solid: true, hardness: 2, drops: 'turret', placeable: true },
     [TILE_TYPES.OXYGEN_STATION]: { solid: true, hardness: 2, drops: 'oxygen_station', placeable: true },
 
+    // Building materials (craftable)
+    [TILE_TYPES.WOOD_PLANK]: { solid: true, hardness: 1, drops: 'wood_plank', placeable: true },
+    [TILE_TYPES.LADDER]: { solid: false, hardness: 1, drops: 'ladder', placeable: true, climbable: true },
+    [TILE_TYPES.PLATFORM]: { solid: false, hardness: 1, drops: 'platform', placeable: true, platform: true },
+    [TILE_TYPES.TORCH]: { solid: false, hardness: 1, drops: 'torch', placeable: true, glows: true, glowColor: 'rgba(255, 200, 100, 0.5)', glowRadius: 6 },
+    [TILE_TYPES.STORAGE_CRATE]: { solid: true, hardness: 2, drops: 'storage_crate', placeable: true, storage: true, storageSlots: 20 },
+    [TILE_TYPES.REINFORCED_STONE]: { solid: true, hardness: 4, drops: 'reinforced_stone', placeable: true },
+    [TILE_TYPES.GLASS_PANE]: { solid: true, hardness: 1, drops: 'glass_pane', placeable: true, transparent: true },
+
     [TILE_TYPES.BEDROCK]: { solid: true, hardness: -1, drops: null },
 };
 
@@ -215,7 +233,7 @@ export const BIOMES = {
 // Player settings
 export const PLAYER = {
     SPEED: 3,
-    JUMP_FORCE: 8,
+    JUMP_FORCE: 5.5, // Reduced for ~2 block jump height
     GRAVITY: 0.4,
     MAX_FALL_SPEED: 12,
     WIDTH: 12,
@@ -228,6 +246,10 @@ export const PLAYER = {
     OXYGEN_DRAIN_RATE: 0.02, // Per frame in underground
     HEAT_GAIN_RATE: 0.05, // Per frame near hot tiles
     HEAT_DECAY_RATE: 0.02, // Per frame when not near heat
+    // Inventory settings
+    BASE_INVENTORY_SLOTS: 20,
+    DEFAULT_STACK_LIMIT: 99,
+    JUMP_BUFFER_TIME: 100, // ms to buffer jump input
 };
 
 // Equipment Slots
@@ -1105,11 +1127,13 @@ export const KEYS = {
     JUMP: ['KeyW', 'ArrowUp', 'Space'],
     MOVE_DOWN: ['KeyS', 'ArrowDown'],
     DRILL: ['Mouse0'],
+    PLACE_BLOCK: ['Mouse2'], // Right-click to place blocks
     SONAR: ['KeyE'],
     TOOL_1: ['Digit1'],
     TOOL_2: ['Digit2'],
     TOOL_3: ['Digit3'],
     TOOL_4: ['Digit4'],
+    TOOL_5: ['Digit5'],
     INVENTORY: ['Tab', 'KeyI'],
     PAUSE: ['Escape'],
     PLACE_TURRET: ['KeyT'],
@@ -1118,6 +1142,61 @@ export const KEYS = {
     RECALL: ['KeyH'],
     EQUIPMENT: ['KeyQ'],
     BIOFORGE: ['KeyB'],
+    CYCLE_PLACEABLE: ['KeyC'], // Cycle through placeable blocks
+};
+
+// Item definitions with stack limits and properties
+export const ITEMS = {
+    // Terrain materials (high stack limit)
+    dirt: { stackLimit: 999, placeable: true, tileType: TILE_TYPES.DIRT },
+    stone: { stackLimit: 999, placeable: true, tileType: TILE_TYPES.STONE },
+    petrified_wood: { stackLimit: 999, placeable: true, tileType: TILE_TYPES.PETRIFIED_WOOD },
+    gravel: { stackLimit: 999, placeable: true, tileType: TILE_TYPES.GRAVEL },
+    volcanic_rock: { stackLimit: 999, placeable: true, tileType: TILE_TYPES.VOLCANIC_ROCK },
+    basalt: { stackLimit: 999, placeable: true, tileType: TILE_TYPES.BASALT },
+    obsidian: { stackLimit: 999, placeable: true, tileType: TILE_TYPES.OBSIDIAN },
+    void_stone: { stackLimit: 999, placeable: true, tileType: TILE_TYPES.VOID_STONE },
+    shadow_glass: { stackLimit: 999, placeable: true, tileType: TILE_TYPES.SHADOW_GLASS },
+
+    // Special materials (medium stack limit)
+    amber: { stackLimit: 99, placeable: false },
+    crystal: { stackLimit: 99, placeable: true, tileType: TILE_TYPES.CRYSTAL },
+    floating_rock: { stackLimit: 99, placeable: true, tileType: TILE_TYPES.FLOATING_ROCK },
+    ash: { stackLimit: 999, placeable: true, tileType: TILE_TYPES.ASH },
+
+    // Dragon materials (low stack limit, valuable)
+    vitae_sap_small: { stackLimit: 99, placeable: false },
+    vitae_sap: { stackLimit: 50, placeable: false },
+    vitae_sap_pure: { stackLimit: 20, placeable: false },
+    ignis_plasma_small: { stackLimit: 99, placeable: false },
+    ignis_plasma: { stackLimit: 50, placeable: false },
+    ignis_plasma_pure: { stackLimit: 20, placeable: false },
+    umbra_ichor_small: { stackLimit: 99, placeable: false },
+    umbra_ichor: { stackLimit: 50, placeable: false },
+    umbra_ichor_pure: { stackLimit: 20, placeable: false },
+
+    // Fossils (very low stack limit)
+    dragon_bone: { stackLimit: 20, placeable: false },
+    dragon_claw: { stackLimit: 10, placeable: false },
+    dragon_tooth: { stackLimit: 10, placeable: false },
+    dragon_skull: { stackLimit: 5, placeable: false },
+    dragon_ribcage: { stackLimit: 5, placeable: false },
+
+    // Craftable building materials
+    wood_plank: { stackLimit: 999, placeable: true, craftable: true, tileType: TILE_TYPES.WOOD_PLANK },
+    ladder: { stackLimit: 99, placeable: true, craftable: true, tileType: TILE_TYPES.LADDER },
+    platform: { stackLimit: 99, placeable: true, craftable: true, tileType: TILE_TYPES.PLATFORM },
+    torch: { stackLimit: 99, placeable: true, craftable: true, tileType: TILE_TYPES.TORCH },
+    storage_crate: { stackLimit: 10, placeable: true, craftable: true, tileType: TILE_TYPES.STORAGE_CRATE },
+    reinforced_stone: { stackLimit: 999, placeable: true, craftable: true, tileType: TILE_TYPES.REINFORCED_STONE },
+    glass_pane: { stackLimit: 99, placeable: true, craftable: true, tileType: TILE_TYPES.GLASS_PANE },
+
+    // Equipment/Machines
+    pipe: { stackLimit: 50, placeable: true },
+    extractor: { stackLimit: 10, placeable: true },
+    turret: { stackLimit: 10, placeable: true },
+    oxygen_station: { stackLimit: 5, placeable: true },
+    pump: { stackLimit: 10, placeable: true },
 };
 
 // Game states
@@ -1220,6 +1299,15 @@ export const TILE_COLORS = {
     [TILE_TYPES.PUMP]: '#aa8844',
     [TILE_TYPES.TURRET]: '#668866',
     [TILE_TYPES.OXYGEN_STATION]: '#4488cc',
+
+    // Building materials
+    [TILE_TYPES.WOOD_PLANK]: '#8b6914',
+    [TILE_TYPES.LADDER]: '#9a7b2a',
+    [TILE_TYPES.PLATFORM]: '#7a6b5a',
+    [TILE_TYPES.TORCH]: '#ffd700',
+    [TILE_TYPES.STORAGE_CRATE]: '#8b7355',
+    [TILE_TYPES.REINFORCED_STONE]: '#5a5a6a',
+    [TILE_TYPES.GLASS_PANE]: '#aaccee',
 
     // Bedrock
     [TILE_TYPES.BEDROCK]: '#1a1a1a',

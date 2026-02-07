@@ -14,6 +14,9 @@ export class CraftingSystem {
         // Recipes: chassis + strain combination -> result
         this.recipes = this.initializeRecipes();
 
+        // Material crafting recipes: input materials -> output
+        this.materialRecipes = this.initializeMaterialRecipes();
+
         // Catalyst rarities
         this.catalysts = {
             common: { multiplier: 1, dropChance: 0.3 },
@@ -21,6 +24,132 @@ export class CraftingSystem {
             rare: { multiplier: 2, dropChance: 0.05 },
             legendary: { multiplier: 3, dropChance: 0.01 },
         };
+    }
+
+    /**
+     * Initialize material crafting recipes
+     * Format: { id, name, inputs: { item: count }, outputs: { item: count }, category }
+     */
+    initializeMaterialRecipes() {
+        return [
+            // Basic Building Materials
+            {
+                id: 'wood_plank',
+                name: 'Wood Planks',
+                category: 'building',
+                inputs: { petrified_wood: 2 },
+                outputs: { wood_plank: 4 },
+            },
+            {
+                id: 'ladder',
+                name: 'Ladder',
+                category: 'building',
+                inputs: { wood_plank: 3 },
+                outputs: { ladder: 2 },
+            },
+            {
+                id: 'platform',
+                name: 'Platform',
+                category: 'building',
+                inputs: { wood_plank: 2 },
+                outputs: { platform: 3 },
+            },
+            {
+                id: 'torch',
+                name: 'Torch',
+                category: 'lighting',
+                inputs: { wood_plank: 1, vitae_sap_small: 1 },
+                outputs: { torch: 4 },
+            },
+            {
+                id: 'torch_ignis',
+                name: 'Ignis Torch',
+                category: 'lighting',
+                inputs: { wood_plank: 1, ignis_plasma_small: 1 },
+                outputs: { torch: 6 },
+            },
+            // Storage
+            {
+                id: 'storage_crate',
+                name: 'Storage Crate',
+                category: 'storage',
+                inputs: { wood_plank: 8, stone: 4 },
+                outputs: { storage_crate: 1 },
+            },
+            // Advanced Building Materials
+            {
+                id: 'reinforced_stone',
+                name: 'Reinforced Stone',
+                category: 'building',
+                inputs: { stone: 4, basalt: 2 },
+                outputs: { reinforced_stone: 4 },
+            },
+            {
+                id: 'glass_pane',
+                name: 'Glass Pane',
+                category: 'building',
+                inputs: { crystal: 2 },
+                outputs: { glass_pane: 4 },
+            },
+            {
+                id: 'glass_pane_amber',
+                name: 'Amber Glass',
+                category: 'building',
+                inputs: { amber: 2 },
+                outputs: { glass_pane: 3 },
+            },
+            // Equipment crafting materials
+            {
+                id: 'pipe_craft',
+                name: 'Pipe',
+                category: 'equipment',
+                inputs: { stone: 5, basalt: 2 },
+                outputs: { pipe: 3 },
+            },
+            {
+                id: 'extractor_craft',
+                name: 'Extractor',
+                category: 'equipment',
+                inputs: { stone: 10, obsidian: 3, vitae_sap: 2 },
+                outputs: { extractor: 1 },
+            },
+            {
+                id: 'turret_craft',
+                name: 'Turret',
+                category: 'equipment',
+                inputs: { basalt: 8, obsidian: 2, ignis_plasma: 2 },
+                outputs: { turret: 1 },
+            },
+            {
+                id: 'oxygen_station_craft',
+                name: 'Oxygen Station',
+                category: 'equipment',
+                inputs: { stone: 15, crystal: 5, vitae_sap: 5 },
+                outputs: { oxygen_station: 1 },
+            },
+            // Refined materials
+            {
+                id: 'pure_vitae',
+                name: 'Purify Vitae Sap',
+                category: 'refining',
+                inputs: { vitae_sap: 5 },
+                outputs: { vitae_sap_pure: 1 },
+            },
+            {
+                id: 'pure_ignis',
+                name: 'Purify Ignis Plasma',
+                category: 'refining',
+                inputs: { ignis_plasma: 5 },
+                outputs: { ignis_plasma_pure: 1 },
+            },
+            {
+                id: 'pure_umbra',
+                name: 'Purify Umbra Ichor',
+                category: 'refining',
+                inputs: { umbra_ichor: 5 },
+                outputs: { umbra_ichor_pure: 1 },
+            },
+        ];
     }
 
     /**
@@ -181,6 +310,107 @@ export class CraftingSystem {
         for (const [resource, amount] of Object.entries(cost)) {
             player.inventory[resource] = (player.inventory[resource] || 0) - amount;
         }
+    }
+
+    /**
+     * Add resources to player inventory
+     */
+    addResources(player, items) {
+        for (const [resource, amount] of Object.entries(items)) {
+            if (!player.inventory.hasOwnProperty(resource)) {
+                player.inventory[resource] = 0;
+            }
+            player.inventory[resource] += amount;
+        }
+    }
+
+    /**
+     * Craft a material recipe
+     * @param {Object} player - Player with inventory
+     * @param {string} recipeId - ID of the recipe to craft
+     * @param {number} count - Number of times to craft (default 1)
+     * @returns {Object} Result with success status
+     */
+    craftMaterial(player, recipeId, count = 1) {
+        const recipe = this.materialRecipes.find(r => r.id === recipeId);
+        if (!recipe) {
+            return { success: false, error: 'Recipe not found' };
+        }
+
+        // Calculate total inputs needed
+        const totalInputs = {};
+        for (const [item, amount] of Object.entries(recipe.inputs)) {
+            totalInputs[item] = amount * count;
+        }
+
+        // Check if player has resources
+        if (!this.hasResources(player, totalInputs)) {
+            return { success: false, error: 'Missing materials' };
+        }
+
+        // Consume inputs and give outputs
+        this.consumeResources(player, totalInputs);
+
+        const totalOutputs = {};
+        for (const [item, amount] of Object.entries(recipe.outputs)) {
+            totalOutputs[item] = amount * count;
+        }
+        this.addResources(player, totalOutputs);
+
+        return {
+            success: true,
+            recipe: recipe,
+            crafted: totalOutputs,
+        };
+    }
+
+    /**
+     * Check if player can craft a material recipe
+     */
+    canCraftMaterial(player, recipeId, count = 1) {
+        const recipe = this.materialRecipes.find(r => r.id === recipeId);
+        if (!recipe) return false;
+
+        const totalInputs = {};
+        for (const [item, amount] of Object.entries(recipe.inputs)) {
+            totalInputs[item] = amount * count;
+        }
+
+        return this.hasResources(player, totalInputs);
+    }
+
+    /**
+     * Get all material recipes, optionally filtered by category
+     */
+    getMaterialRecipes(category = null) {
+        if (category) {
+            return this.materialRecipes.filter(r => r.category === category);
+        }
+        return this.materialRecipes;
+    }
+
+    /**
+     * Get available material recipes the player can craft
+     */
+    getAvailableMaterialRecipes(player) {
+        return this.materialRecipes.map(recipe => ({
+            ...recipe,
+            canCraft: this.canCraftMaterial(player, recipe.id),
+            maxCraftable: this.getMaxCraftable(player, recipe),
+        }));
+    }
+
+    /**
+     * Calculate maximum number of times a recipe can be crafted
+     */
+    getMaxCraftable(player, recipe) {
+        let maxCraft = Infinity;
+        for (const [item, amount] of Object.entries(recipe.inputs)) {
+            const available = player.inventory[item] || 0;
+            const possible = Math.floor(available / amount);
+            maxCraft = Math.min(maxCraft, possible);
+        }
+        return maxCraft === Infinity ? 0 : maxCraft;
     }
 
     /**

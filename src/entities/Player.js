@@ -6,7 +6,7 @@
 
 import {
     PLAYER, TILE_SIZE, TILE_TYPES, TILE_PROPERTIES, TOOLS, SONAR, BIOMES,
-    LIVING_TOOLS, EQUIPMENT_SLOTS, EQUIPMENT_SETS
+    LIVING_TOOLS, EQUIPMENT_SLOTS, EQUIPMENT_SETS, ITEMS
 } from '../core/Constants.js';
 import { input } from '../core/Input.js';
 
@@ -30,6 +30,15 @@ export class Player {
         this.drillTarget = null;
         this.isClimbing = false;
         this.isGliding = false;
+
+        // Jump buffering for reliable jumping
+        this.jumpBufferTime = 0;
+        this.coyoteTime = 0; // Time after leaving ground where jump still works
+        this.wasGrounded = false;
+
+        // Block placement
+        this.selectedPlaceable = null;
+        this.placeableItems = []; // List of items that can be placed
 
         // Stats
         this.health = PLAYER.MAX_HEALTH;
@@ -115,12 +124,24 @@ export class Player {
             crystal: 0,
             floating_rock: 0,
             shadow_glass: 0,
+            // Craftable building materials
+            wood_plank: 0,
+            ladder: 0,
+            platform: 0,
+            torch: 0,
+            storage_crate: 0,
+            reinforced_stone: 0,
+            glass_pane: 0,
             // Equipment
             pipe: 5,
             extractor: 1,
             turret: 2,
             oxygen_station: 1,
         };
+
+        // Inventory capacity
+        this.baseInventorySlots = PLAYER.BASE_INVENTORY_SLOTS;
+        this.usedInventorySlots = 0;
 
         // Currency
         this.money = 0;
@@ -539,16 +560,39 @@ export class Player {
             this.isClimbing = false;
         }
 
-        // Jump / Double jump
-        if (input.isActionJustPressed('JUMP')) {
-            if (this.grounded || this.isClimbing) {
-                this.vy = -PLAYER.JUMP_FORCE;
-                this.grounded = false;
-                this.isClimbing = false;
-            } else if (canDoubleJump && !this.hasEffect('double_jumped')) {
-                this.vy = -PLAYER.JUMP_FORCE * 0.8;
-                this.addEffect('double_jumped', 100);
+        // Update coyote time (can still jump briefly after leaving ground)
+        if (this.grounded) {
+            this.coyoteTime = 80; // 80ms grace period
+            this.wasGrounded = true;
+        } else if (this.wasGrounded) {
+            this.coyoteTime -= 16; // Approximate frame time
+            if (this.coyoteTime <= 0) {
+                this.wasGrounded = false;
             }
+        }
+
+        // Jump buffering - remember jump input for a short time
+        if (input.isActionJustPressed('JUMP')) {
+            this.jumpBufferTime = PLAYER.JUMP_BUFFER_TIME;
+        } else if (this.jumpBufferTime > 0) {
+            this.jumpBufferTime -= 16; // Approximate frame time
+        }
+
+        // Jump / Double jump with buffering
+        const canJump = this.grounded || this.isClimbing || this.coyoteTime > 0;
+        const wantsJump = this.jumpBufferTime > 0;
+
+        if (wantsJump && canJump) {
+            this.vy = -PLAYER.JUMP_FORCE;
+            this.grounded = false;
+            this.isClimbing = false;
+            this.coyoteTime = 0;
+            this.jumpBufferTime = 0;
+            this.wasGrounded = false;
+        } else if (wantsJump && canDoubleJump && !this.hasEffect('double_jumped')) {
+            this.vy = -PLAYER.JUMP_FORCE * 0.8;
+            this.addEffect('double_jumped', 100);
+            this.jumpBufferTime = 0;
         }
 
         // Gliding
@@ -609,6 +653,12 @@ export class Player {
         if (input.isActionJustPressed('TOOL_2')) this.currentTool = TOOLS.SONAR;
         if (input.isActionJustPressed('TOOL_3')) this.currentTool = TOOLS.PIPE;
         if (input.isActionJustPressed('TOOL_4')) this.currentTool = TOOLS.TURRET;
+        if (input.isActionJustPressed('TOOL_5')) this.currentTool = 'BUILD';
+
+        // Cycle through placeable items (C key)
+        if (input.isActionJustPressed('CYCLE_PLACEABLE')) {
+            this.cyclePlaceableItem();
+        }
 
         // Tool use
         if (this.currentTool === TOOLS.DRILL) {
@@ -619,6 +669,13 @@ export class Player {
             this.handlePipePlacement(world);
         } else if (this.currentTool === TOOLS.TURRET) {
             this.handleTurretPlacement(world);
+        } else if (this.currentTool === 'BUILD') {
+            this.handleBlockPlacement(world);
+        }
+
+        // Right-click block placement (works regardless of current tool)
+        if (input.isActionJustPressed('PLACE_BLOCK')) {
+            this.handleBlockPlacement(world);
         }
 
         // Extractor placement (R key)
@@ -629,6 +686,96 @@ export class Player {
         // Oxygen station placement (O key)
         if (input.isActionJustPressed('PLACE_OXYGEN')) {
             this.handleOxygenStationPlacement(world);
+        }
+    }
+
+    /**
+     * Cycle through placeable items in inventory
+     */
+    cyclePlaceableItem() {
+        // Build list of placeable items the player has
+        this.placeableItems = [];
+        for (const [itemName, count] of Object.entries(this.inventory)) {
+            if (count > 0) {
+                const itemDef = ITEMS[itemName];
+                if (itemDef && itemDef.placeable && itemDef.tileType !== undefined) {
+                    this.placeableItems.push(itemName);
+                }
+            }
+        }
+
+        if (this.placeableItems.length === 0) {
+            this.selectedPlaceable = null;
+            return;
+        }
+
+        // Find current index and cycle to next
+        const currentIndex = this.placeableItems.indexOf(this.selectedPlaceable);
+        const nextIndex = (currentIndex + 1) % this.placeableItems.length;
+        this.selectedPlaceable = this.placeableItems[nextIndex];
+    }
+
+    /**
+     * Handle block placement
+     */
+    handleBlockPlacement(world) {
+        if (!this.selectedPlaceable) {
+            // Try to auto-select first placeable item
+            this.cyclePlaceableItem();
+            if (!this.selectedPlaceable) return;
+        }
+
+        // Check if we have the item
+        if ((this.inventory[this.selectedPlaceable] || 0) <= 0) {
+            this.cyclePlaceableItem(); // Try to find another placeable
+            return;
+        }
+
+        const mouseWorld = input.getMouseWorldPosition();
+        const targetTileX = Math.floor(mouseWorld.x / TILE_SIZE);
+        const targetTileY = Math.floor(mouseWorld.y / TILE_SIZE);
+
+        // Check if in range
+        const playerTileX = Math.floor((this.x + this.width / 2) / TILE_SIZE);
+        const playerTileY = Math.floor((this.y + this.height / 2) / TILE_SIZE);
+
+        const distance = Math.sqrt(
+            (targetTileX - playerTileX) ** 2 +
+            (targetTileY - playerTileY) ** 2
+        );
+
+        if (distance > PLAYER.DRILL_RANGE + 1) {
+            return; // Too far
+        }
+
+        // Check if target is air (can place)
+        const currentTile = world.getTile(targetTileX, targetTileY);
+        if (currentTile !== TILE_TYPES.AIR && currentTile !== TILE_TYPES.SKY) {
+            return; // Can't place on non-air
+        }
+
+        // Check player isn't standing there
+        const playerLeft = Math.floor(this.x / TILE_SIZE);
+        const playerRight = Math.floor((this.x + this.width) / TILE_SIZE);
+        const playerTop = Math.floor(this.y / TILE_SIZE);
+        const playerBottom = Math.floor((this.y + this.height) / TILE_SIZE);
+
+        if (targetTileX >= playerLeft && targetTileX <= playerRight &&
+            targetTileY >= playerTop && targetTileY <= playerBottom) {
+            return; // Can't place where player is standing
+        }
+
+        // Get the tile type to place
+        const itemDef = ITEMS[this.selectedPlaceable];
+        if (!itemDef || itemDef.tileType === undefined) return;
+
+        // Place the block
+        world.setTile(targetTileX, targetTileY, itemDef.tileType);
+        this.inventory[this.selectedPlaceable]--;
+
+        // If we ran out, cycle to next placeable
+        if (this.inventory[this.selectedPlaceable] <= 0) {
+            this.cyclePlaceableItem();
         }
     }
 
@@ -880,13 +1027,78 @@ export class Player {
      * Collect dropped items
      */
     collectDrop(dropType) {
-        if (!dropType) return;
+        if (!dropType) return false;
 
-        // Initialize if not exists, then increment
+        // Get item definition and stack limit
+        const itemDef = ITEMS[dropType];
+        const stackLimit = itemDef?.stackLimit || PLAYER.DEFAULT_STACK_LIMIT;
+
+        // Initialize if not exists
         if (!this.inventory.hasOwnProperty(dropType)) {
             this.inventory[dropType] = 0;
         }
+
+        // Check stack limit
+        if (this.inventory[dropType] >= stackLimit) {
+            return false; // Stack full
+        }
+
+        // Check inventory capacity (count unique item types as slots)
+        const currentSlots = this.getUsedInventorySlots();
+        const maxSlots = this.getMaxInventorySlots();
+
+        // If this is a new item type and we're at capacity, can't collect
+        if (this.inventory[dropType] === 0 && currentSlots >= maxSlots) {
+            return false; // Inventory full
+        }
+
         this.inventory[dropType]++;
+        return true;
+    }
+
+    /**
+     * Get number of inventory slots currently in use (unique item types with count > 0)
+     */
+    getUsedInventorySlots() {
+        return Object.values(this.inventory).filter(count => count > 0).length;
+    }
+
+    /**
+     * Get maximum inventory slots (base + backpack bonus)
+     */
+    getMaxInventorySlots() {
+        let slots = this.baseInventorySlots;
+
+        // Add backpack capacity bonus
+        const backpack = this.livingTools.backpack;
+        if (backpack && backpack.capacityBonus) {
+            // capacityBonus of 50 = +5 slots, 100 = +10 slots
+            slots += Math.floor(backpack.capacityBonus / 10);
+        }
+
+        // Add equipment bonus calculated in applyEquipmentEffects
+        slots += Math.floor((this.equipmentCapacityBonus || 0) / 10);
+
+        return slots;
+    }
+
+    /**
+     * Check if player can collect an item
+     */
+    canCollectItem(itemType) {
+        const itemDef = ITEMS[itemType];
+        const stackLimit = itemDef?.stackLimit || PLAYER.DEFAULT_STACK_LIMIT;
+        const currentCount = this.inventory[itemType] || 0;
+
+        if (currentCount >= stackLimit) return false;
+
+        if (currentCount === 0) {
+            const currentSlots = this.getUsedInventorySlots();
+            const maxSlots = this.getMaxInventorySlots();
+            if (currentSlots >= maxSlots) return false;
+        }
+
+        return true;
     }
 
     /**
